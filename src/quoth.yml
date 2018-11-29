@@ -1,0 +1,265 @@
+name: quoth
+about: "Add a new quote\nOr use a subcommand to find a quote"
+before_help: "Record, retrieve, search, and categorize quotes from books"
+args:
+
+- delete:
+    help: Delete quote at <INDEX>
+    short: d
+    long: delete
+    value_name: INDEX
+    takes_value: true
+
+- change:
+    help: Changes quote at <INDEX>
+    short: c
+    long: change
+    value_name: INDEX
+    takes_value: true
+
+subcommands:
+- search:
+    about: Finds quotes matching a pattern
+    display-order: 1
+    args:
+    - pattern:
+        short: p
+        required: true
+        index: 1
+        value_name: PATTERN
+        help: Lists quotes matching <PATTERN>
+    - from:
+        long: from
+        value_name: DATE
+        help: Quotes from <DATE>
+    - to:
+        long: to
+        value_name: DATE
+        help: Quotes till <DATE>
+    - on:
+        long: on
+        value_name: DATE
+        help: Quotes on <DATE>
+    - author:
+        short: a
+        long: author
+        value_name: AUTHOR
+        takes_value: true
+        help: Quotes by <AUTHOR>
+        conflicts_with:
+        - book
+    - book:
+        long: book
+        short: b
+        value_name: BOOK
+        takes_value: true
+        help: Quotes from <BOOK>
+        conflicts_with:
+        - author
+    - tag:
+        long: tag
+        short: t
+        takes_value: true
+        value_name: TAG
+        help: Quotes with <TAG>
+    groups:
+    - date-range:
+        args:
+        - from
+        - to
+        multiple: true
+        conflicts_with:
+        - on
+- list:
+      about: Lists quotes
+      display-order: 2
+      args:
+      - from:
+            long: from
+            value_name: DATE
+            help: Quotes from <DATE>
+      - to:
+          long: to
+          value_name: DATE
+          help: Quotes till <DATE>
+      - on:
+          long: on
+          value_name: DATE
+          help: Quotes on <DATE>
+      - author:
+            short: a
+            long: author
+            value_name: AUTHOR
+            takes_value: true
+            help: Quotes by <AUTHOR>
+            conflicts_with:
+              - book
+      - book:
+            long: book
+            short: b
+            value_name: BOOK
+            takes_value: true
+            help: Quotes from <BOOK>
+            conflicts_with:
+              - author
+      - tag:
+            long: tag
+            short: t
+            takes_value: true
+            value_name: TAG
+            help: Quotes with <TAG>
+      groups:
+          - date-range:
+              args:
+                - from
+                - to
+              multiple: true
+              conflicts_with:
+                - on
+- random:
+    about: Displays a random quote
+    display-order: 3
+    args:
+    - from:
+        long: from
+        value_name: DATE
+        help: Quotes from <DATE>
+    - to:
+        long: to
+        value_name: DATE
+        help: Quotes till <DATE>
+    - on:
+        long: on
+        value_name: DATE
+        help: Quotes on <DATE>
+    - author:
+        short: a
+        long: author
+        value_name: AUTHOR
+        takes_value: true
+        help: Quotes by <AUTHOR>
+        conflicts_with:
+        - book
+    - book:
+        long: book
+        short: b
+        value_name: BOOK
+        takes_value: true
+        help: Quotes from <BOOK>
+        conflicts_with:
+        - author
+    - tag:
+        long: tag
+        short: t
+        takes_value: true
+        value_name: TAG
+        help: Quotes with <TAG>
+    groups:
+    - date-range:
+        args:
+        - from
+        - to
+        multiple: true
+        conflicts_with:
+        - on
+- import:
+    about: Imports quotes from a JSON/TSV file
+    display-order: 4 
+    args:
+    - json:
+        short: j
+        long: json
+        value_name: JSON_FILE
+        takes_value: true
+        conflicts_with:
+          - tsv
+    - tsv:
+        short: t
+        long: tsv
+        value_name: TSV_FILE
+        takes_value: true
+        conflicts_with:
+          - json
+- export:
+    about: Saves (optionally filtered) quotes to a TSV file
+    display-order: 5 
+    args:
+    - filename:
+        short: o
+        required: true
+        index: 1
+        value_name: FILENAME
+        help: filename to write quotes to
+    - from:
+        long: from
+        value_name: DATE
+        help: Quotes from <DATE>
+    - to:
+        long: to
+        value_name: DATE
+        help: Quotes till <DATE>
+    - on:
+        long: on
+        value_name: DATE
+        help: Quotes on <DATE>
+    - author:
+        short: a
+        long: author
+        value_name: AUTHOR
+        takes_value: true
+        help: Quotes by <AUTHOR>
+        conflicts_with:
+        - book
+    - book:
+        long: book
+        short: b
+        value_name: BOOK
+        takes_value: true
+        help: Quotes from <BOOK>
+        conflicts_with:
+        - author
+    - tag:
+        long: tag
+        short: t
+        takes_value: true
+        value_name: TAG
+        help: Quotes with <TAG>
+    groups:
+    - date-range:
+        args:
+        - from
+        - to
+        multiple: true
+        conflicts_with:
+        - on
+- config:
+    about: Change quoth settings
+    display-order: 6 
+    args:
+    - clear:
+        help: Clears all quoth data
+        short: C
+        long: clear
+    - dir:
+        help: Sets quoth dir to <DIR> (moves old files if they exist)
+        short: D
+        long: dir
+        value_name: DIR
+        takes_value: true
+    - completions:
+        help: Generates completions for your shell
+        takes_value: true
+        value_name: SHELL
+        short: c
+        long: completions
+        possible_values: 
+            - zsh
+            - bash
+            - fish
+    groups:
+      - change:
+          args:
+            - clear
+            - dir
+            - completions
+          required: true
