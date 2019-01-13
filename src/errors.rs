@@ -34,5 +34,5 @@ pub enum QuothError {
         display = "I can't read {}. Make sure it has 'Quote', 'Book', and 'Author' columns and is tab-separated.",
         filename
     )]
-    ParseError { filename: String },
+    FileParseError { filename: String },
 }

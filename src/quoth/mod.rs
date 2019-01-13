@@ -22,44 +22,44 @@ use std::io;
 
 /// Makes config file (default ~/quoth.txt) with a single line containing the location of the quoth directory (default ~/.quoth)
 fn make_quoth_config_file() -> Result<(), Error> {
-    let home_dir = dirs::home_dir();
-    if let Some(home_dir) = home_dir {
-        let config_file = PathFile::create(PathDir::new(&home_dir)?.join(config::CONFIG_PATH))?;
-        config_file.write_str(
-            &PathDir::new(home_dir)?
-                .join(config::QUOTH_DIR_DEFAULT)
-                .to_string(),
-        )?;
-        Ok(())
-    } else {
-        Err(QuothError::Homeless.into())
+    match dirs::home_dir() {
+        Some(home_dir) => {
+            let config_file = PathFile::create(PathDir::new(&home_dir)?.join(config::CONFIG_PATH))?;
+            config_file.write_str(
+                &PathDir::new(home_dir)?
+                    .join(config::QUOTH_DIR_DEFAULT)
+                    .to_string(),
+            )?;
+            Ok(())
+        }
+        None => Err(QuothError::Homeless.into()),
     }
 }
 
 /// Reads config file to get location of the quoth directory
 fn get_quoth_dir() -> Result<PathDir, Error> {
-    let home_dir = dirs::home_dir();
-    if let Some(home_dir) = home_dir {
-        let config_file = PathAbs::new(PathDir::new(home_dir)?.join(config::CONFIG_PATH))?;
-        if !config_file.exists() {
-            make_quoth_config_file()?;
+    match dirs::home_dir() {
+        Some(home_dir) => {
+            let config_file = PathAbs::new(PathDir::new(home_dir)?.join(config::CONFIG_PATH))?;
+            if !config_file.exists() {
+                make_quoth_config_file()?;
+            }
+            let quoth_dir_string = PathFile::new(config_file)?.read_string()?;
+            Ok(PathDir::create_all(quoth_dir_string.trim())?)
         }
-        let quoth_dir_string = PathFile::new(config_file)?.read_string()?;
-        Ok(PathDir::create_all(quoth_dir_string.trim())?)
-    } else {
-        Err(QuothError::Homeless.into())
+        None => Err(QuothError::Homeless.into()),
     }
 }
 
 /// Changes the location of the quoth directory
 fn change_quoth_dir(new_dir: &str) -> Result<(), Error> {
-    let home_dir = dirs::home_dir();
-    if let Some(home_dir) = home_dir {
-        let config_file = PathFile::create(PathDir::new(home_dir)?.join(config::CONFIG_PATH))?;
-        config_file.write_str(new_dir)?;
-        Ok(())
-    } else {
-        Err(QuothError::Homeless.into())
+    match dirs::home_dir() {
+        Some(home_dir) => {
+            let config_file = PathFile::create(PathDir::new(home_dir)?.join(config::CONFIG_PATH))?;
+            config_file.write_str(new_dir)?;
+            Ok(())
+        }
+        None => Err(QuothError::Homeless.into()),
     }
 }
 
@@ -141,8 +141,7 @@ impl<'a> Quoth<'a> {
             match self.matches.subcommand() {
                 ("config", Some(matches)) => self.config(matches),
                 ("import", Some(matches)) => {
-                    let quotes = self.import(matches)?;
-                    for quote in quotes {
+                    for quote in self.import(matches)? {
                         self.trees.add_quote(&quote, self.quoth_dir)?;
                     }
                     Ok(())
@@ -151,12 +150,7 @@ impl<'a> Quoth<'a> {
                 ("list", Some(matches)) => self.list(matches),
                 ("search", Some(matches)) => self.search(matches),
                 ("random", Some(matches)) => self.random(matches),
-                _ => {
-                    let quote = self.quoth()?;
-                    println!("{:?}", quote);
-                    self.trees.add_quote(&quote, self.quoth_dir)?;
-                    Ok(())
-                }
+                _ => self.quoth()
             }
         }
     }
@@ -191,27 +185,24 @@ impl<'a> Quoth<'a> {
     }
 
     /// Adds a new quote
-    fn quoth(&self) -> Result<Quote, Error> {
-        let title = utils::user_input("Book Title", None, false)?;
-        let author = utils::user_input("Author", None, false)?;
-        let tags = utils::user_input("Tags (comma separated)", Some("\n"), false)?;
-        let mut quote_text = utils::user_input(
-            "Quote (<RET> to edit in external editor)",
-            Some("\n"),
-            false,
-        )?;
-        if quote_text.is_empty() {
-            quote_text = utils::external_editor_input(None)?;
-        }
-        let quote = Quote::new(
-            self.trees.metadata.get_quote_index() + 1,
-            &title,
-            &author,
-            &tags,
-            Utc::now(),
-            quote_text,
-        );
-        Ok(quote)
+    fn quoth(&mut self) -> Result<(), Error> {
+        let quote = Quote::from_user(self.trees.metadata.get_quote_index() + 1, None)?;
+        println!("Added quote #{}", self.trees.add_quote(&quote, self.quoth_dir)?);
+        Ok(())
+    }
+
+    /// Changes a quote at a particular index
+    fn change_quote(&mut self) -> Result<(), Error> {
+        let index = utils::get_argument_value("change", &self.matches)?
+            .ok_or(QuothError::OutOfCheeseError {
+                message: "Argument change not used".into(),
+            })?
+            .parse::<usize>()?;
+        let old_quote = Quote::retrieve(index, self.quoth_dir)?;
+        let new_quote = Quote::from_user(index, Some(old_quote))?;
+        self.trees.change_quote(index, &new_quote, self.quoth_dir)?;
+        println!("Quote #{} changed", index);
+        Ok(())
     }
 
     /// Filters a list of quotes by given author/book/tag/date
@@ -317,14 +308,13 @@ impl<'a> Quoth<'a> {
             }
         }
         if delete_old_dir == "Y" {
-            self.quoth_dir.clone().remove_all()?;
-        } else if delete_old_dir == "N" {
-            return Err(QuothError::DoingNothing {
+            Ok(self.quoth_dir.clone().remove_all()?)
+        } else {
+            Err(QuothError::DoingNothing {
                 message: "I'm a coward.".into(),
             }
-            .into());
+            .into())
         }
-        Ok(())
     }
 
     /// Deletes a quote at a particular index
@@ -347,44 +337,13 @@ impl<'a> Quoth<'a> {
             self.trees
                 .delete_quote(index.parse::<usize>()?, self.quoth_dir)?;
             println!("Quote #{} deleted", index);
-        } else if sure_delete == "N" {
-            return Err(QuothError::DoingNothing {
+            Ok(())
+        } else {
+            Err(QuothError::DoingNothing {
                 message: "I'm a coward.".into(),
             }
-            .into());
+            .into())
         }
-        Ok(())
-    }
-
-    /// Changes a quote at a particular index
-    fn change_quote(&mut self) -> Result<(), Error> {
-        let index = utils::get_argument_value("change", &self.matches)?
-            .ok_or(QuothError::OutOfCheeseError {
-                message: "Argument change not used".into(),
-            })?
-            .parse::<usize>()?;
-        let quote = Quote::retrieve(index, self.quoth_dir)?;
-        let title = utils::user_input("Book Title", Some(&quote.book), true)?;
-        let author = utils::user_input("Author", Some(&quote.author), true)?;
-        let tags = utils::user_input("Tags (comma separated)", Some(&quote.tags.join(",")), true)?;
-        let date = utils::parse_date(&utils::user_input(
-            "Date",
-            Some(&quote.date.date().format("%Y-%m-%d").to_string()),
-            true,
-        )?)?
-        .and_hms(0, 0, 0);
-        let mut quote_text = utils::user_input(
-            "Quote (<RET> to edit in external editor)",
-            Some("\n"),
-            false,
-        )?;
-        if quote_text.is_empty() {
-            quote_text = utils::external_editor_input(Some(&quote.quote))?;
-        }
-        let new_quote = Quote::new(index, &title, &author, &tags, date, quote_text);
-        self.trees.change_quote(index, &new_quote, self.quoth_dir)?;
-        println!("Quote #{} changed", index);
-        Ok(())
     }
 
     /// Saves (optionally filtered) quotes to a TSV file
@@ -477,7 +436,7 @@ impl<'a> Quoth<'a> {
                 }
                 Ok(quotes)
             } else {
-                Err(QuothError::ParseError {
+                Err(QuothError::FileParseError {
                     filename: tsv_file
                         .to_str()
                         .ok_or(QuothError::OutOfCheeseError {

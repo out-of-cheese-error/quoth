@@ -2,12 +2,14 @@ use crate::config;
 use crate::errors::QuothError;
 use crate::quoth::metadata::Metadata;
 use crate::utils;
+use crate::utils::OptionDeref;
 use chrono::{DateTime, Utc};
 use console::{pad_str, style, Alignment};
 use failure::Error;
 use path_abs::{FileRead, PathDir, PathFile};
 use serde_json;
 use textwrap::{termwidth, Wrapper};
+
 
 /// Stores information about a quote
 #[derive(Serialize, Deserialize, Debug)]
@@ -87,6 +89,41 @@ impl Quote {
         }
     }
 
+    pub fn from_user(index: usize, default_quote: Option<Quote>) -> Result<Quote, Error> {
+        let default_quote = match default_quote {
+            Some(q) => Some(TSVQuote::from(q)),
+            None => None
+        };
+        let (default_title, default_author, default_tags, default_date, default_text) = match default_quote {
+            Some(q) => (
+                Some(q.book),
+                Some(q.author),
+                Some(q.tags),
+                Some(q.date),
+                Some(q.quote),
+            ),
+            None => (None, None, None, None, None),
+        };
+        let title = utils::user_input("Book Title", default_title.as_deref(), false)?;
+        let author = utils::user_input("Author", default_author.as_deref(), false)?;
+        let tags = utils::user_input("Tags (comma separated)", default_tags.as_deref(), false)?;
+        let date = match default_date {
+            Some(_) => {
+                utils::parse_date(&utils::user_input("Date", default_date.as_deref(), true)?)?.and_hms(0, 0, 0)
+            }
+            None => Utc::now(),
+        };
+        let mut quote_text = utils::user_input(
+            "Quote (<RET> to edit in external editor)",
+            Some("\n"),
+            false,
+        )?;
+        if quote_text.is_empty() {
+            quote_text = utils::external_editor_input(default_text.as_deref())?;
+        }
+        Ok(Quote::new(index, &title, &author, &tags, date, quote_text))
+    }
+
     /// Write quote to Quotes JSON file
     fn write(&self, quoth_dir: &PathDir) -> Result<(), Error> {
         let quote_json = serde_json::to_string(self)?;
@@ -132,14 +169,11 @@ impl Quote {
         let mut indices = indices.to_vec().into_iter().peekable();
         let mut quote_stream = Quote::read(quoth_dir)?;
         let mut quotes = Vec::new();
-        while indices.peek().is_some() {
-            let index = *indices.peek().ok_or(QuothError::OutOfCheeseError {
-                message: "no more indices".into(),
-            })?;
+        while let Some(index) = indices.peek() {
             let quote = quote_stream
                 .next()
-                .ok_or(QuothError::QuoteNotFound { index })??;
-            if quote.index == index {
+                .ok_or(QuothError::QuoteNotFound { index: *index })??;
+            if quote.index == *index {
                 quotes.push(quote);
                 indices.next().ok_or(QuothError::OutOfCheeseError {
                     message: "no more indices".into(),

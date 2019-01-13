@@ -6,6 +6,7 @@ use clap::ArgMatches;
 use dialoguer::{Editor, Input};
 use failure::Error;
 use std::str;
+use std::ops::Deref;
 
 pub const RAVEN: char = '\u{1313F}';
 
@@ -116,17 +117,15 @@ pub fn get_argument_value<'a>(
     name: &str,
     matches: &'a ArgMatches<'a>,
 ) -> Result<Option<&'a str>, Error> {
-    if matches.is_present(name) {
-        let value = matches.value_of(name).ok_or(QuothError::OutOfCheeseError {
-            message: format!("No argument value for {}", name),
-        })?;
-        if value.trim().is_empty() {
-            Err(QuothError::NoInputError.into())
-        } else {
-            Ok(Some(value.trim()))
+    match matches.value_of(name) {
+        Some(value) => {
+            if value.trim().is_empty() {
+                Err(QuothError::NoInputError.into())
+            } else {
+                Ok(Some(value.trim()))
+            }
         }
-    } else {
-        Ok(None)
+        None => Ok(None),
     }
 }
 
@@ -146,4 +145,14 @@ pub fn insertion_sort(array: &[usize]) -> Vec<usize> {
         output_array[test_slot + 1] = value;
     }
     output_array
+}
+
+pub trait OptionDeref<T: Deref> {
+    fn as_deref(&self) -> Option<&T::Target>;
+}
+
+impl<T: Deref> OptionDeref<T> for Option<T> {
+    fn as_deref(&self) -> Option<&T::Target> {
+        self.as_ref().map(Deref::deref)
+    }
 }

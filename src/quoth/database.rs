@@ -143,17 +143,14 @@ impl Trees {
         if self.author_quote_tree.get(author_key)?.is_some() {
             self.author_quote_tree
                 .merge(author_key.to_vec(), index_key.to_vec())?;
-            let books =
-                utils::split_values_string(&self.author_book_tree.get(author_key)?.ok_or(
-                    QuothError::OutOfCheeseError {
-                        message: "MELON MELON MELON".into(),
-                    },
-                )?)?;
-            if books.contains(&book) {
-                self.book_quote_tree
-                    .merge(book_key.to_vec(), index_key.to_vec())?;
-            } else {
-                self.add_book(author_key, book_key, index_key)?;
+            if let Some(books_string) = self.author_book_tree.get(author_key)? {
+                let books = utils::split_values_string(&books_string)?;
+                if books.contains(&book) {
+                    self.book_quote_tree
+                        .merge(book_key.to_vec(), index_key.to_vec())?;
+                } else {
+                    self.add_book(author_key, book_key, index_key)?;
+                }
             }
         } else {
             self.author_quote_tree
@@ -229,20 +226,15 @@ impl Trees {
     /// Delete a quote index from the tag-quote tree
     fn delete_from_tag(&mut self, tag_key: &[u8], index: usize) -> Result<(), Error> {
         let tag = utils::u8_to_str(tag_key)?;
-        let indices = utils::split_indices_usize(
+        let new_indices: Vec<_> = utils::split_indices_usize(
             &self
                 .tag_quote_tree
                 .get(tag_key)?
                 .ok_or(QuothError::TagNotFound { tag })?,
-        )?;
-        let mut new_indices = Vec::new();
-        for index_i in indices {
-            if index_i == index {
-                continue;
-            } else {
-                new_indices.push(index_i);
-            }
-        }
+        )?
+        .into_iter()
+        .filter(|index_i| *index_i != index)
+        .collect();
         if new_indices.is_empty() {
             self.delete_tag(tag_key)?;
         } else {
@@ -255,20 +247,15 @@ impl Trees {
     /// Delete a quote index from the book-quote tree
     fn delete_from_book(&mut self, book_key: &[u8], index: usize) -> Result<(), Error> {
         let book = utils::u8_to_str(book_key)?;
-        let indices = utils::split_indices_usize(
+        let new_indices: Vec<_> = utils::split_indices_usize(
             &self
                 .book_quote_tree
                 .get(book_key)?
                 .ok_or(QuothError::BookNotFound { book })?,
-        )?;
-        let mut new_indices = Vec::new();
-        for index_i in indices {
-            if index_i == index {
-                continue;
-            } else {
-                new_indices.push(index_i);
-            }
-        }
+        )?
+        .into_iter()
+        .filter(|index_i| *index_i != index)
+        .collect();
         if new_indices.is_empty() {
             self.delete_book(book_key)?;
         } else {
@@ -286,20 +273,15 @@ impl Trees {
         index: usize,
     ) -> Result<(), Error> {
         let author = utils::u8_to_str(author_key)?;
-        let indices = utils::split_indices_usize(
+        let new_indices: Vec<_> = utils::split_indices_usize(
             &self
                 .author_quote_tree
                 .get(author_key)?
                 .ok_or(QuothError::AuthorNotFound { author })?,
-        )?;
-        let mut new_indices = Vec::new();
-        for index_i in indices {
-            if index_i == index {
-                continue;
-            } else {
-                new_indices.push(index_i);
-            }
-        }
+        )?
+        .into_iter()
+        .filter(|index_i| *index_i != index)
+        .collect();
         if new_indices.is_empty() {
             self.delete_author(author_key)?;
         } else {
@@ -335,14 +317,13 @@ impl Trees {
     ) -> Result<(), Error> {
         let old_quote = Quote::change(index, new_quote, quoth_dir)?
             .ok_or(QuothError::QuoteNotFound { index })?;
-        let old_author_key = old_quote.author.as_bytes();
-        let old_book_key = old_quote.book.as_bytes();
+        let (old_author_key, old_book_key) =
+            (old_quote.author.as_bytes(), old_quote.book.as_bytes());
         self.delete_from_author_and_book(old_author_key, old_book_key, index)?;
         for tag in old_quote.tags {
             self.delete_from_tag(tag.as_bytes(), index)?;
         }
-        let author_key = new_quote.author.as_bytes();
-        let book_key = new_quote.book.as_bytes();
+        let (author_key, book_key) = (new_quote.author.as_bytes(), new_quote.book.as_bytes());
         let index_key = index.to_string();
         let index_key = index_key.as_bytes();
         self.add_author_and_book(author_key, book_key, index_key)?;
