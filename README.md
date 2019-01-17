@@ -13,12 +13,15 @@ This [blog post](https://out-of-cheese-error.netlify.com/quoth.html) has more de
 ### Examples:
 
 Adding a new quote:
+
 ![quoth quoth](images/quoth_quoth.gif)
 
 Searching for a quote (shell completions generated using `quoth config --completions zsh > ~/.oh_my_zsh/completions/_quoth`):
+
 ![quoth_search](images/quoth_completions.gif)
 
 Printing a quote:
+
 ![quoth pretty print](images/quoth_pretty_print.png)
 
 
