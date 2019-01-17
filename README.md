@@ -4,7 +4,7 @@
 
 A Rust learning project. 
 
-This [blog post](https://out-of-cheese-error.netlify.com/quoth.html) has more details.
+This [blog post](https://out-of-cheese-error.netlify.com/quoth) has more details.
 
 ### Usage:
 
