@@ -20,7 +20,7 @@ Searching for a quote (shell completions generated using `quoth config --complet
 
 ![quoth_search](images/quoth_completions.gif)
 
-Printing a quote:
+Random quote:
 
 ![quoth pretty print](images/quoth_pretty_print.png)
 
