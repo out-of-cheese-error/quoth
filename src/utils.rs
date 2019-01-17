@@ -3,10 +3,10 @@ use crate::errors::QuothError;
 use chrono::{Date, DateTime, Utc, MAX_DATE, MIN_DATE};
 use chrono_english::{parse_date_string, Dialect};
 use clap::ArgMatches;
-use dialoguer::{Editor, Input};
+use dialoguer::{theme, Editor, Input};
 use failure::Error;
-use std::str;
 use std::ops::Deref;
+use std::str;
 
 pub const RAVEN: char = '\u{1313F}';
 
@@ -72,7 +72,11 @@ pub fn make_indices_string(index_list: &[usize]) -> Result<Vec<u8>, Error> {
 }
 
 pub fn parse_date(date_string: &str) -> Result<Date<Utc>, Error> {
-    Ok(parse_date_string(date_string, Utc::now(), Dialect::Uk)?.date())
+    if date_string.to_ascii_lowercase() == "today" {
+        Ok(Utc::now().date())
+    } else {
+        Ok(parse_date_string(date_string, Utc::now(), Dialect::Uk)?.date())
+    }
 }
 
 /// Some(date) => date
@@ -102,13 +106,20 @@ pub fn user_input(
     show_default: bool,
 ) -> Result<String, Error> {
     match default {
-        Some(d) => Ok(Input::new(message)
-            .default(d)
+        Some(default) => Ok(Input::with_theme(&theme::ColorfulTheme::default())
+            .with_prompt(message)
+            .default(default.to_owned())
             .show_default(show_default)
             .interact()?
             .trim()
             .to_owned()),
-        None => Ok(Input::new(message).interact()?.trim().to_owned()),
+        None => Ok(
+            Input::<String>::with_theme(&theme::ColorfulTheme::default())
+                .with_prompt(message)
+                .interact()?
+                .trim()
+                .to_owned(),
+        ),
     }
 }
 

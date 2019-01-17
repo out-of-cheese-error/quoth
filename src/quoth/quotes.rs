@@ -10,7 +10,6 @@ use path_abs::{FileRead, PathDir, PathFile};
 use serde_json;
 use textwrap::{termwidth, Wrapper};
 
-
 /// Stores information about a quote
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Quote {
@@ -92,24 +91,26 @@ impl Quote {
     pub fn from_user(index: usize, default_quote: Option<Quote>) -> Result<Quote, Error> {
         let default_quote = match default_quote {
             Some(q) => Some(TSVQuote::from(q)),
-            None => None
+            None => None,
         };
-        let (default_title, default_author, default_tags, default_date, default_text) = match default_quote {
-            Some(q) => (
-                Some(q.book),
-                Some(q.author),
-                Some(q.tags),
-                Some(q.date),
-                Some(q.quote),
-            ),
-            None => (None, None, None, None, None),
-        };
+        let (default_title, default_author, default_tags, default_date, default_text) =
+            match default_quote {
+                Some(q) => (
+                    Some(q.book),
+                    Some(q.author),
+                    Some(q.tags),
+                    Some(q.date),
+                    Some(q.quote),
+                ),
+                None => (None, None, None, None, None),
+            };
         let title = utils::user_input("Book Title", default_title.as_deref(), false)?;
         let author = utils::user_input("Author", default_author.as_deref(), false)?;
         let tags = utils::user_input("Tags (comma separated)", default_tags.as_deref(), false)?;
         let date = match default_date {
             Some(_) => {
-                utils::parse_date(&utils::user_input("Date", default_date.as_deref(), true)?)?.and_hms(0, 0, 0)
+                utils::parse_date(&utils::user_input("Date", default_date.as_deref(), true)?)?
+                    .and_hms(0, 0, 0)
             }
             None => Utc::now(),
         };

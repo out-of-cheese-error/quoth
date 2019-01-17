@@ -150,7 +150,7 @@ impl<'a> Quoth<'a> {
                 ("list", Some(matches)) => self.list(matches),
                 ("search", Some(matches)) => self.search(matches),
                 ("random", Some(matches)) => self.random(matches),
-                _ => self.quoth()
+                _ => self.quoth(),
             }
         }
     }
@@ -187,7 +187,10 @@ impl<'a> Quoth<'a> {
     /// Adds a new quote
     fn quoth(&mut self) -> Result<(), Error> {
         let quote = Quote::from_user(self.trees.metadata.get_quote_index() + 1, None)?;
-        println!("Added quote #{}", self.trees.add_quote(&quote, self.quoth_dir)?);
+        println!(
+            "Added quote #{}",
+            self.trees.add_quote(&quote, self.quoth_dir)?
+        );
         Ok(())
     }
 
@@ -278,9 +281,25 @@ impl<'a> Quoth<'a> {
 
     /// Clears all quoth data
     fn clear(&self) -> Result<(), Error> {
-        Trees::clear(self.quoth_dir)?;
-        Quote::clear(self.quoth_dir)?;
-        Ok(())
+        let mut sure_delete;
+        loop {
+            sure_delete =
+                utils::user_input("Clear all quoth data Y/N?", Some("N"), true)?
+                    .to_ascii_uppercase();
+            if sure_delete == "Y" || sure_delete == "N" {
+                break;
+            }
+        }
+        if sure_delete == "Y" {
+            Trees::clear(self.quoth_dir)?;
+            Quote::clear(self.quoth_dir)?;
+            Ok(())
+        } else {
+            Err(QuothError::DoingNothing {
+                message: "I'm a coward.".into(),
+            }
+                .into())
+        }
     }
 
     /// Changes quoth directory
@@ -308,7 +327,8 @@ impl<'a> Quoth<'a> {
             }
         }
         if delete_old_dir == "Y" {
-            Ok(self.quoth_dir.clone().remove_all()?)
+            self.quoth_dir.clone().remove_all()?;
+            Ok(())
         } else {
             Err(QuothError::DoingNothing {
                 message: "I'm a coward.".into(),
