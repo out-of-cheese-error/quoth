@@ -232,9 +232,12 @@ subcommands:
         multiple: true
         conflicts_with:
         - on
+- stats:
+      about: Display quoth usage counts
+      display-order: 6
 - config:
     about: Change quoth settings
-    display-order: 6 
+    display-order: 7
     args:
     - clear:
         help: Clears all quoth data

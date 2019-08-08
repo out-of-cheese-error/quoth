@@ -1,12 +1,14 @@
 mod database;
 mod metadata;
 mod quotes;
+pub mod stats;
 
 use crate::config;
 use crate::errors::QuothError;
 use crate::quoth::database::Trees;
 use crate::quoth::quotes::{Quote, TSVQuote};
 use crate::utils;
+use crate::quoth::stats::{Event, Events, Stats};
 
 use chrono::{DateTime, Utc};
 use clap::{App, ArgMatches, Shell};
@@ -19,6 +21,25 @@ use regex::Regex;
 use serde_json;
 use std::collections::HashMap;
 use std::io;
+use chrono::{Date, Datelike, Utc, MAX_DATE, MIN_DATE};
+use failure::Error;
+use path_abs::{PathAbs, PathDir, PathFile};
+use std::collections::{HashMap, HashSet};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+use termion::event::Key;
+use termion::input::MouseTerminal;
+use termion::input::TermRead;
+use termion::raw::IntoRawMode;
+use termion::screen::AlternateScreen;
+use textwrap::termwidth;
+use tui::backend::TermionBackend;
+use tui::layout::{Alignment, Constraint, Direction, Layout};
+use tui::style::{Color, Modifier, Style};
+use tui::widgets::{BarChart, Block, Borders, Paragraph, Row, Sparkline, Table, Text, Widget};
+use tui::Terminal;
+
 
 /// Makes config file (default ~/quoth.txt) with a single line containing the location of the quoth directory (default ~/.quoth)
 fn make_quoth_config_file() -> Result<(), Error> {
@@ -37,7 +58,7 @@ fn make_quoth_config_file() -> Result<(), Error> {
 }
 
 /// Reads config file to get location of the quoth directory
-fn get_quoth_dir() -> Result<PathDir, Error> {
+pub fn get_quoth_dir() -> Result<PathDir, Error> {
     match dirs::home_dir() {
         Some(home_dir) => {
             let config_file = PathAbs::new(PathDir::new(home_dir)?.join(config::CONFIG_PATH))?;
@@ -137,6 +158,8 @@ impl<'a> Quoth<'a> {
             self.delete_quote()
         } else if self.matches.is_present("change") {
             self.change_quote()
+        } else if self.matches.is_present("stats") {
+            self.display_stats()
         } else {
             match self.matches.subcommand() {
                 ("config", Some(matches)) => self.config(matches),
@@ -205,6 +228,129 @@ impl<'a> Quoth<'a> {
         let new_quote = Quote::from_user(index, Some(old_quote))?;
         self.trees.change_quote(index, &new_quote, self.quoth_dir)?;
         println!("Quote #{} changed", index);
+        Ok(())
+    }
+
+    /// Uses termion and tui to display a dashboard with 4 components
+    /// 1. Number of quotes written per month as a bar chart
+    /// 2. Number of books read per month as a bar chart
+    /// 3. A table of the number of books and quotes corresponding to each author
+    /// 4. Total numbers of quotes, books, authors, and tags recorded in quoth
+    /// Use arrow keys to scroll the bar charts and the table
+    fn display_stats(&self) -> Result<(), Error> {
+        // Terminal initialization
+        let stdout = io::stdout().into_raw_mode()?;
+        let stdout = MouseTerminal::from(stdout);
+        let stdout = AlternateScreen::from(stdout);
+        let backend = TermionBackend::new(stdout);
+        let mut terminal = Terminal::new(backend)?;
+        terminal.hide_cursor()?;
+
+        // Setup event handlers
+        let events = Events::new();
+
+        // App
+        let bar_width = 5;
+        let num_rows = (terminal.size()?.height / 5 - 4) as usize;
+        let mut quoth_stats = Stats::from_quoth(self.quoth_dir, termwidth() / bar_width, num_rows)?;
+        loop {
+            terminal.draw(|mut f| {
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .margin(2)
+                    .constraints(
+                        [
+                            Constraint::Percentage(40),
+                            Constraint::Percentage(40),
+                            Constraint::Percentage(20),
+                        ]
+                            .as_ref(),
+                    )
+                    .split(f.size());
+
+                // Quote Stats
+                BarChart::default()
+                    .block(Block::default().title("Quotes").borders(Borders::ALL))
+                    .data(
+                        &quoth_stats.quote_counts
+                            [quoth_stats.start_index_bar..quoth_stats.end_index_bar]
+                            .iter()
+                            .map(|(m, x)| (m.as_str(), *x))
+                            .collect::<Vec<_>>(),
+                    )
+                    .bar_width(bar_width as u16)
+                    .max(quoth_stats.max_quotes)
+                    .style(Style::default().fg(Color::Gray))
+                    .value_style(Style::default().bg(Color::Black))
+                    .render(&mut f, chunks[1]);
+
+
+                // Book Stats
+                BarChart::default()
+                    .block(Block::default().title("Books").borders(Borders::ALL))
+                    .data(
+                        &quoth_stats.book_counts
+                            [quoth_stats.start_index_bar..quoth_stats.end_index_bar]
+                            .iter()
+                            .map(|(m, x)| (m.as_str(), *x))
+                            .collect::<Vec<_>>(),
+                    )
+                    .bar_width(bar_width as u16)
+                    .max(quoth_stats.max_books)
+                    .style(Style::default().fg(Color::Cyan))
+                    .value_style(Style::default().bg(Color::Black))
+                    .render(&mut f, chunks[0]);
+
+
+                {
+                    let chunks = Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)].as_ref())
+                        .split(chunks[2]);
+
+
+                    // Author Stats
+                    let row_style = Style::default().fg(Color::White);
+                    let header_style = Style::default().fg(Color::Blue).modifier(Modifier::BOLD);
+                    Table::new(
+                        vec!["Author", "Books", "Quotes"].into_iter(),
+                        quoth_stats.author_table
+                            [quoth_stats.start_index_table..quoth_stats.end_index_table]
+                            .iter()
+                            .map(|row| Row::StyledData(row.into_iter(), row_style)),
+                    )
+                        .header_style(header_style)
+                        .block(Block::default().title("Authors").borders(Borders::ALL))
+                        .widths(&[25, 5, 5])
+                        .render(&mut f, chunks[0]);
+
+
+                    // Total Stats
+                    Paragraph::new(vec![
+                        Text::styled(&format!("{}\n", utils::RAVEN), Style::default().modifier(Modifier::DIM)),
+                        Text::raw(&format!("# Quotes {}\n", quoth_stats.metadata.num_quotes) ),
+                        Text::styled(&format!("# Books {}\n", quoth_stats.metadata.num_books), Style::default().fg(Color::Cyan)),
+                        Text::styled(&format!("# Authors {}\n", quoth_stats.metadata.num_authors), Style::default().fg(Color::Blue)),
+                        Text::styled(&format!("# Tags {}\n", quoth_stats.metadata.num_tags), Style::default().modifier(Modifier::DIM)),
+                    ].iter())
+                        .block(Block::default().title("Total").borders(Borders::ALL))
+                        .alignment(Alignment::Center)
+                        .render(&mut f, chunks[1]);
+                }
+            })?;
+
+            match events.next()? {
+                Event::Input(input) => {
+                    if input == Key::Char('q') {
+                        break;
+                    } else {
+                        quoth_stats.update(input);
+                    }
+                }
+                Event::Tick => (),
+            }
+        }
+
         Ok(())
     }
 
@@ -283,9 +429,8 @@ impl<'a> Quoth<'a> {
     fn clear(&self) -> Result<(), Error> {
         let mut sure_delete;
         loop {
-            sure_delete =
-                utils::user_input("Clear all quoth data Y/N?", Some("N"), true)?
-                    .to_ascii_uppercase();
+            sure_delete = utils::user_input("Clear all quoth data Y/N?", Some("N"), true)?
+                .to_ascii_uppercase();
             if sure_delete == "Y" || sure_delete == "N" {
                 break;
             }
@@ -298,7 +443,7 @@ impl<'a> Quoth<'a> {
             Err(QuothError::DoingNothing {
                 message: "I'm a coward.".into(),
             }
-                .into())
+            .into())
         }
     }
 

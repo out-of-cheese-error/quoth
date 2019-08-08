@@ -14,13 +14,17 @@ mod errors;
 mod quoth;
 mod utils;
 
+use crate::quoth::stats;
 use crate::quoth::Quoth;
 use clap::App;
+use failure::Error;
 
-fn main() {
-    let yaml = load_yaml!("quoth.yml");
-    let matches = App::from_yaml(yaml).get_matches();
-    if let Err(err) = Quoth::start(matches) {
-        println!("{}", err);
-    }
+fn main() -> Result<(), Error> {
+    stats::display_stats()?;
+    Ok(())
+    //    let yaml = load_yaml!("quoth.yml");
+    //    let matches = App::from_yaml(yaml).get_matches();
+    //    if let Err(err) = Quoth::start(matches) {
+    //        println!("{}", err);
+    //    }
 }
