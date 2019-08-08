@@ -1,27 +1,17 @@
+#![allow(dead_code)]
 use std::io;
-
-use crate::quoth::get_quoth_dir;
 use crate::quoth::metadata::Metadata;
 use crate::quoth::quotes::Quote;
 use chrono::{Date, Datelike, Utc, MAX_DATE, MIN_DATE};
 use failure::Error;
-use path_abs::{PathAbs, PathDir, PathFile};
+use path_abs::PathDir;
 use std::collections::{HashMap, HashSet};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 use termion::event::Key;
-use termion::input::MouseTerminal;
 use termion::input::TermRead;
-use termion::raw::IntoRawMode;
-use termion::screen::AlternateScreen;
-use textwrap::termwidth;
-use tui::backend::TermionBackend;
-use tui::layout::{Alignment, Constraint, Direction, Layout};
-use tui::style::{Color, Modifier, Style};
-use tui::widgets::{BarChart, Block, Borders, Paragraph, Row, Sparkline, Table, Text, Widget};
-use tui::Terminal;
-use crate::utils;
+use crate::errors::QuothError;
 
 pub enum Event<I> {
     Input(I),
@@ -63,16 +53,13 @@ impl Events {
             thread::spawn(move || {
                 let stdin = io::stdin();
                 for evt in stdin.keys() {
-                    match evt {
-                        Ok(key) => {
-                            if let Err(_) = tx.send(Event::Input(key)) {
-                                return;
-                            }
-                            if key == config.exit_key {
-                                return;
-                            }
+                    if let Ok(key) = evt {
+                        if tx.send(Event::Input(key)).is_err() {
+                            return;
                         }
-                        Err(_) => {}
+                        if key == config.exit_key {
+                            return;
+                        }
                     }
                 }
             })
@@ -114,42 +101,17 @@ pub struct Stats {
     pub metadata: Metadata,
 }
 
-fn format_date(date: &Date<Utc>) -> String {
+fn format_date(date: Date<Utc>) -> String {
     let year = date.year().to_string().chars().skip(2).collect::<String>();
     format!("{}-{}", date.month(), year)
 }
 
 impl Stats {
-    fn get_counts_per_time(
-        quoth_dir: &PathDir,
-    ) -> Result<(Vec<(String, u64)>, Vec<(String, u64)>, u64, u64), Error> {
-        let mut book_dates = HashMap::new();
-        let mut quote_counts = HashMap::new();
-        for quote in Quote::list_in_date_range(
-            MIN_DATE.and_hms(0, 0, 0),
-            MAX_DATE.and_hms(23, 59, 59),
-            quoth_dir,
-        )? {
-            *quote_counts
-                .entry(quote.date.date().with_day(1).unwrap())
-                .or_insert(0) += 1;
-            book_dates.insert(quote.book, quote.date.date().with_day(1).unwrap());
-        }
-        let mut book_counts = HashMap::new();
-        for (_, month) in book_dates {
-            *book_counts.entry(month).or_insert(0) += 1;
-        }
-        let max_books = *book_counts.iter().max_by(|a, b| a.1.cmp(b.1)).unwrap().1;
-        let max_quotes = *quote_counts.iter().max_by(|a, b| a.1.cmp(b.1)).unwrap().1;
-        let mut months: Vec<_> = quote_counts.keys().collect();
-        let (min_date, max_date) = (
-            **months.iter().min().unwrap(),
-            **months.iter().max().unwrap(),
-        );
+    fn get_months(min_date: Date<Utc>, max_date: Date<Utc>) -> Vec<Date<Utc>> {
         let (min_year, min_month) = (min_date.year(), min_date.month());
         let (max_year, max_month) = (max_date.year(), max_date.month());
         let mut months = Vec::with_capacity((max_year - min_year) as usize * 12);
-        let mut date = Utc::now().date();
+        let date = Utc::now().date();
         for month in min_month..=12 {
             months.push(
                 date.with_year(min_year)
@@ -182,14 +144,43 @@ impl Stats {
                     .unwrap(),
             );
         }
+        months
+    }
 
+    fn get_counts_per_month(
+        quoth_dir: &PathDir,
+    ) -> Result<(Vec<(String, u64)>, Vec<(String, u64)>, u64, u64), Error> {
+        let mut book_dates = HashMap::new();
+        let mut quote_counts = HashMap::new();
+        for quote in Quote::list_in_date_range(
+            MIN_DATE.and_hms(0, 0, 0),
+            MAX_DATE.and_hms(23, 59, 59),
+            quoth_dir,
+        )? {
+            *quote_counts
+                .entry(quote.date.date().with_day(1).ok_or(QuothError::OutOfCheeseError {message: "This month doesn't have a first day".into()})?)
+                .or_insert(0) += 1;
+            book_dates.insert(quote.book, quote.date.date().with_day(1).ok_or(QuothError::OutOfCheeseError {message: "This month doesn't have a first day".into()})?);
+        }
+        let mut book_counts = HashMap::new();
+        for (_, month) in book_dates {
+            *book_counts.entry(month).or_insert(0) += 1;
+        }
+        let max_books = *book_counts.iter().max_by(|a, b| a.1.cmp(b.1)).unwrap().1;
+        let max_quotes = *quote_counts.iter().max_by(|a, b| a.1.cmp(b.1)).unwrap().1;
+        let months: Vec<_> = quote_counts.keys().collect();
+        let (min_date, max_date) = (
+            **months.iter().min().unwrap(),
+            **months.iter().max().unwrap(),
+        );
+        let months = Stats::get_months(min_date, max_date);
         let book_counts: Vec<(String, u64)> = months
             .iter()
-            .map(|m| (format_date(m), *(book_counts.get(m).unwrap_or(&0))))
+            .map(|m| (format_date(*m), *(book_counts.get(m).unwrap_or(&0))))
             .collect();
         let quote_counts: Vec<(String, u64)> = months
             .iter()
-            .map(|m| (format_date(m), *(quote_counts.get(m).unwrap_or(&0))))
+            .map(|m| (format_date(*m), *(quote_counts.get(m).unwrap_or(&0))))
             .collect();
         Ok((book_counts, quote_counts, max_books, max_quotes))
     }
@@ -222,7 +213,7 @@ impl Stats {
 
     pub fn from_quoth(quoth_dir: &PathDir, num_bars: usize, num_rows: usize) -> Result<Self, Error> {
         let (book_counts, quote_counts, max_books, max_quotes) =
-            Stats::get_counts_per_time(quoth_dir)?;
+            Stats::get_counts_per_month(quoth_dir)?;
         let num_bars = num_bars.min(quote_counts.len());
         let author_table = Stats::get_author_table(quoth_dir)?;
         let num_rows = num_rows.min(author_table.len());
@@ -281,120 +272,3 @@ impl Stats {
     }
 }
 
-//pub fn display_stats() -> Result<(), failure::Error> {
-//    // Terminal initialization
-//    let stdout = io::stdout().into_raw_mode()?;
-//    let stdout = MouseTerminal::from(stdout);
-//    let stdout = AlternateScreen::from(stdout);
-//    let backend = TermionBackend::new(stdout);
-//    let mut terminal = Terminal::new(backend)?;
-//    terminal.hide_cursor()?;
-//
-//    // Setup event handlers
-//    let events = Events::new();
-//
-//    // App
-//    let quoth_dir = get_quoth_dir()?;
-//    let bar_width = 5;
-//    let num_rows = (terminal.size()?.height / 5 - 4) as usize;
-//    let mut quoth_stats = Stats::from_quoth(quoth_dir, termwidth() / bar_width, num_rows)?;
-//    loop {
-//        terminal.draw(|mut f| {
-//            let chunks = Layout::default()
-//                .direction(Direction::Vertical)
-//                .margin(2)
-//                .constraints(
-//                    [
-//                        Constraint::Percentage(40),
-//                        Constraint::Percentage(40),
-//                        Constraint::Percentage(20),
-//                    ]
-//                    .as_ref(),
-//                )
-//                .split(f.size());
-//
-//            // Quote Stats
-//            BarChart::default()
-//                .block(Block::default().title("Quotes").borders(Borders::ALL))
-//                .data(
-//                    &quoth_stats.quote_counts
-//                        [quoth_stats.start_index_bar..quoth_stats.end_index_bar]
-//                        .iter()
-//                        .map(|(m, x)| (m.as_str(), *x))
-//                        .collect::<Vec<_>>(),
-//                )
-//                .bar_width(bar_width as u16)
-//                .max(quoth_stats.max_quotes)
-//                .style(Style::default().fg(Color::Gray))
-//                .value_style(Style::default().bg(Color::Black))
-//                .render(&mut f, chunks[1]);
-//
-//
-//            // Book Stats
-//            BarChart::default()
-//                .block(Block::default().title("Books").borders(Borders::ALL))
-//                .data(
-//                    &quoth_stats.book_counts
-//                        [quoth_stats.start_index_bar..quoth_stats.end_index_bar]
-//                        .iter()
-//                        .map(|(m, x)| (m.as_str(), *x))
-//                        .collect::<Vec<_>>(),
-//                )
-//                .bar_width(bar_width as u16)
-//                .max(quoth_stats.max_books)
-//                .style(Style::default().fg(Color::Cyan))
-//                .value_style(Style::default().bg(Color::Black))
-//                .render(&mut f, chunks[0]);
-//
-//
-//            {
-//                let chunks = Layout::default()
-//                    .direction(Direction::Horizontal)
-//                    .constraints([Constraint::Percentage(70), Constraint::Percentage(30)].as_ref())
-//                    .split(chunks[2]);
-//
-//
-//                // Author Stats
-//                let row_style = Style::default().fg(Color::White);
-//                let header_style = Style::default().fg(Color::Blue).modifier(Modifier::BOLD);
-//                Table::new(
-//                    vec!["Author", "Books", "Quotes"].into_iter(),
-//                    quoth_stats.author_table
-//                        [quoth_stats.start_index_table..quoth_stats.end_index_table]
-//                        .iter()
-//                        .map(|row| Row::StyledData(row.into_iter(), row_style)),
-//                )
-//                    .header_style(header_style)
-//                .block(Block::default().title("Authors").borders(Borders::ALL))
-//                .widths(&[25, 5, 5])
-//                .render(&mut f, chunks[0]);
-//
-//
-//                // Total Stats
-//                Paragraph::new(vec![
-//                    Text::styled(&format!("{}\n", utils::RAVEN), Style::default().modifier(Modifier::DIM)),
-//                    Text::raw(&format!("# Quotes {}\n", quoth_stats.metadata.num_quotes) ),
-//                    Text::styled(&format!("# Books {}\n", quoth_stats.metadata.num_books), Style::default().fg(Color::Cyan)),
-//                    Text::styled(&format!("# Authors {}\n", quoth_stats.metadata.num_authors), Style::default().fg(Color::Blue)),
-//                    Text::styled(&format!("# Tags {}\n", quoth_stats.metadata.num_tags), Style::default().modifier(Modifier::DIM)),
-//                ].iter())
-//                    .block(Block::default().title("Total").borders(Borders::ALL))
-//                    .alignment(Alignment::Center)
-//                    .render(&mut f, chunks[1]);
-//            }
-//        })?;
-//
-//        match events.next()? {
-//            Event::Input(input) => {
-//                if input == Key::Char('q') {
-//                    break;
-//                } else {
-//                    quoth_stats.update(input);
-//                }
-//            }
-//            Event::Tick => (),
-//        }
-//    }
-//
-//    Ok(())
-//}

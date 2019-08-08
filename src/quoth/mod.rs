@@ -21,23 +21,15 @@ use regex::Regex;
 use serde_json;
 use std::collections::HashMap;
 use std::io;
-use chrono::{Date, Datelike, Utc, MAX_DATE, MIN_DATE};
-use failure::Error;
-use path_abs::{PathAbs, PathDir, PathFile};
-use std::collections::{HashMap, HashSet};
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
 use termion::event::Key;
 use termion::input::MouseTerminal;
-use termion::input::TermRead;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
 use textwrap::termwidth;
 use tui::backend::TermionBackend;
 use tui::layout::{Alignment, Constraint, Direction, Layout};
 use tui::style::{Color, Modifier, Style};
-use tui::widgets::{BarChart, Block, Borders, Paragraph, Row, Sparkline, Table, Text, Widget};
+use tui::widgets::{BarChart, Block, Borders, Paragraph, Row, Table, Text, Widget};
 use tui::Terminal;
 
 
@@ -237,6 +229,7 @@ impl<'a> Quoth<'a> {
     /// 3. A table of the number of books and quotes corresponding to each author
     /// 4. Total numbers of quotes, books, authors, and tags recorded in quoth
     /// Use arrow keys to scroll the bar charts and the table
+    /// q to quit display
     fn display_stats(&self) -> Result<(), Error> {
         // Terminal initialization
         let stdout = io::stdout().into_raw_mode()?;
@@ -282,7 +275,7 @@ impl<'a> Quoth<'a> {
                     .max(quoth_stats.max_quotes)
                     .style(Style::default().fg(Color::Gray))
                     .value_style(Style::default().bg(Color::Black))
-                    .render(&mut f, chunks[1]);
+                    .render(&mut f, chunks[0]);
 
 
                 // Book Stats
@@ -299,7 +292,7 @@ impl<'a> Quoth<'a> {
                     .max(quoth_stats.max_books)
                     .style(Style::default().fg(Color::Cyan))
                     .value_style(Style::default().bg(Color::Black))
-                    .render(&mut f, chunks[0]);
+                    .render(&mut f, chunks[1]);
 
 
                 {
@@ -332,6 +325,7 @@ impl<'a> Quoth<'a> {
                         Text::styled(&format!("# Books {}\n", quoth_stats.metadata.num_books), Style::default().fg(Color::Cyan)),
                         Text::styled(&format!("# Authors {}\n", quoth_stats.metadata.num_authors), Style::default().fg(Color::Blue)),
                         Text::styled(&format!("# Tags {}\n", quoth_stats.metadata.num_tags), Style::default().modifier(Modifier::DIM)),
+                        Text::raw(&format!("\nScroll: arrow keys\nQuit: q\n")),
                     ].iter())
                         .block(Block::default().title("Total").borders(Borders::ALL))
                         .alignment(Alignment::Center)
@@ -347,10 +341,9 @@ impl<'a> Quoth<'a> {
                         quoth_stats.update(input);
                     }
                 }
-                Event::Tick => (),
+                _ => (),
             }
         }
-
         Ok(())
     }
 
@@ -531,7 +524,7 @@ impl<'a> Quoth<'a> {
         Ok(())
     }
 
-    /// Parses quotes from a JSON/CSV file and adds them to quoth
+    /// Parses quotes from a JSON/TSV file and adds them to quoth
     fn import(&self, matches: &ArgMatches<'a>) -> Result<Vec<Quote>, Error> {
         if matches.is_present("json") {
             let json_file = PathFile::new(utils::get_argument_value("json", matches)?.ok_or(

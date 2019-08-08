@@ -2,7 +2,7 @@ use crate::config;
 use crate::errors::QuothError;
 use crate::quoth::metadata::Metadata;
 use crate::utils;
-use crate::utils::OptionDeref;
+//use crate::utils::OptionDeref;
 use chrono::{DateTime, Utc};
 use console::{pad_str, style, Alignment};
 use failure::Error;

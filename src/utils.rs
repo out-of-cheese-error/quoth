@@ -5,7 +5,7 @@ use chrono_english::{parse_date_string, Dialect};
 use clap::ArgMatches;
 use dialoguer::{theme, Editor, Input};
 use failure::Error;
-use std::ops::Deref;
+//use std::ops::Deref;
 use std::str;
 
 pub const RAVEN: char = '\u{1313F}';
@@ -158,12 +158,12 @@ pub fn insertion_sort(array: &[usize]) -> Vec<usize> {
     output_array
 }
 
-pub trait OptionDeref<T: Deref> {
-    fn as_deref(&self) -> Option<&T::Target>;
-}
-
-impl<T: Deref> OptionDeref<T> for Option<T> {
-    fn as_deref(&self) -> Option<&T::Target> {
-        self.as_ref().map(Deref::deref)
-    }
-}
+//pub trait OptionDeref<T: Deref> {
+//    fn as_deref(&self) -> Option<&T::Target>;
+//}
+//
+//impl<T: Deref> OptionDeref<T> for Option<T> {
+//    fn as_deref(&self) -> Option<&T::Target> {
+//        self.as_ref().map(Deref::deref)
+//    }
+//}

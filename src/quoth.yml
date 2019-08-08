@@ -233,8 +233,8 @@ subcommands:
         conflicts_with:
         - on
 - stats:
-      about: Display quoth usage counts
-      display-order: 6
+    about: Display quoth usage counts (Arrow keys to scroll, q to quit)
+    display-order: 6
 - config:
     about: Change quoth settings
     display-order: 7
