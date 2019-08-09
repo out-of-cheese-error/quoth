@@ -284,7 +284,10 @@ impl Events {
 
 /// Reads quote database (downloaded from https://github.com/ShivaliGoel/Quotes-500K) and saves it as
 /// a JSON file of authors mapped to all their quotes.
-pub fn read_quotes_database(full_database_file: &str, output_database_file: &str) -> Result<(), Error> {
+pub fn read_quotes_database(
+    full_database_file: &str,
+    output_database_file: &str,
+) -> Result<(), Error> {
     let mut reader = csv::ReaderBuilder::new()
         .delimiter(b',')
         .from_path(&full_database_file)?;
@@ -297,13 +300,14 @@ pub fn read_quotes_database(full_database_file: &str, output_database_file: &str
             let author_book = author_book.split(",").collect::<Vec<_>>();
             // Filters out book-less quotes
             if author_book.len() >= 2 {
-                quote_db.entry(author_book[0].to_owned()).or_insert_with(Vec::new).push(quote.to_owned());
+                quote_db
+                    .entry(author_book[0].to_owned())
+                    .or_insert_with(Vec::new)
+                    .push(quote.to_owned());
             }
         }
     }
     let output_database_file = PathFile::create(output_database_file)?;
-    output_database_file.write_str(
-        &serde_json::to_string(&quote_db)?
-    )?;
+    output_database_file.write_str(&serde_json::to_string(&quote_db)?)?;
     Ok(())
 }
