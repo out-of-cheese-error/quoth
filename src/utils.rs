@@ -1,17 +1,23 @@
-use crate::config;
-use crate::errors::QuothError;
-use chrono::{Date, DateTime, Datelike, Utc, MAX_DATE, MIN_DATE};
-use chrono_english::{parse_date_string, Dialect};
-use clap::ArgMatches;
-use dialoguer::{theme, Editor, Input};
-use failure::Error;
+use std::collections::HashMap;
 use std::io;
 use std::str;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+
+use chrono::{Date, Datelike, DateTime, MAX_DATE, MIN_DATE, Utc};
+use chrono_english::{Dialect, parse_date_string};
+use clap::ArgMatches;
+use csv;
+use dialoguer::{Editor, Input, theme};
+use failure::Error;
+use path_abs::PathFile;
+use serde_json;
 use termion::event::Key;
 use termion::input::TermRead;
+
+use crate::config;
+use crate::errors::QuothError;
 
 pub const RAVEN: char = '\u{1313F}';
 
@@ -274,4 +280,30 @@ impl Events {
     pub fn next(&self) -> Result<Event<Key>, mpsc::RecvError> {
         self.rx.recv()
     }
+}
+
+/// Reads quote database (downloaded from https://github.com/ShivaliGoel/Quotes-500K) and saves it as
+/// a JSON file of authors mapped to all their quotes.
+pub fn read_quotes_database(full_database_file: &str, output_database_file: &str) -> Result<(), Error> {
+    let mut reader = csv::ReaderBuilder::new()
+        .delimiter(b',')
+        .from_path(&full_database_file)?;
+    let mut quote_db = HashMap::new();
+    for result in reader.records() {
+        let record = result?;
+        let quote = record.get(0);
+        let author_book = record.get(1);
+        if let (Some(quote), Some(author_book)) = (quote, author_book) {
+            let author_book = author_book.split(",").collect::<Vec<_>>();
+            // Filters out book-less quotes
+            if author_book.len() >= 2 {
+                quote_db.entry(author_book[0].to_owned()).or_insert_with(Vec::new).push(quote.to_owned());
+            }
+        }
+    }
+    let output_database_file = PathFile::create(output_database_file)?;
+    output_database_file.write_str(
+        &serde_json::to_string(&quote_db)?
+    )?;
+    Ok(())
 }
