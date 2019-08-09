@@ -2,12 +2,12 @@ use crate::config;
 use crate::errors::QuothError;
 use crate::quoth::metadata::Metadata;
 use crate::utils;
-//use crate::utils::OptionDeref;
-use chrono::{DateTime, Utc};
+use chrono::{Date, DateTime, Datelike, Utc};
 use console::{pad_str, style, Alignment};
 use failure::Error;
 use path_abs::{FileRead, PathDir, PathFile};
 use serde_json;
+use std::collections::HashMap;
 use textwrap::{termwidth, Wrapper};
 
 /// Stores information about a quote
@@ -252,6 +252,43 @@ impl Quote {
             .into_iter()
             .filter(|quote| quote.in_date_range(from_date, to_date))
             .collect())
+    }
+
+    pub fn get_counts_per_month(
+        from_date: DateTime<Utc>,
+        to_date: DateTime<Utc>,
+        quoth_dir: &PathDir,
+    ) -> Result<(HashMap<Date<Utc>, u64>, HashMap<Date<Utc>, u64>), Error> {
+        let mut book_dates = HashMap::new();
+        let mut quote_counts = HashMap::new();
+        for quote in Quote::list_in_date_range(from_date, to_date, quoth_dir)? {
+            *quote_counts
+                .entry(
+                    quote
+                        .date
+                        .date()
+                        .with_day(1)
+                        .ok_or(QuothError::OutOfCheeseError {
+                            message: "This month doesn't have a first day".into(),
+                        })?,
+                )
+                .or_insert(0) += 1;
+            book_dates.insert(
+                quote.book,
+                quote
+                    .date
+                    .date()
+                    .with_day(1)
+                    .ok_or(QuothError::OutOfCheeseError {
+                        message: "This month doesn't have a first day".into(),
+                    })?,
+            );
+        }
+        let mut book_counts = HashMap::new();
+        for (_, month) in book_dates {
+            *book_counts.entry(month).or_insert(0) += 1;
+        }
+        Ok((quote_counts, book_counts))
     }
 
     /// Filters quotes in date range

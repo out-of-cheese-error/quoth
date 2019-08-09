@@ -233,8 +233,23 @@ subcommands:
         conflicts_with:
         - on
 - stats:
-    about: Display quoth usage counts (Arrow keys to scroll, q to quit)
+    about: Display quoth usage counts
     display-order: 6
+    args:
+    - from:
+        long: from
+        value_name: DATE
+        help: from <DATE> (only applies to the bar charts)
+    - to:
+        long: to
+        value_name: DATE
+        help: till <DATE> (only applies to the bar charts)
+    groups:
+    - date-range:
+        args:
+        - from
+        - to
+        multiple: true
 - config:
     about: Change quoth settings
     display-order: 7

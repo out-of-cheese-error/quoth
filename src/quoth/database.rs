@@ -6,6 +6,7 @@ use crate::utils;
 use failure::Error;
 use path_abs::PathDir;
 use sled;
+use std::collections::HashMap;
 use std::str;
 
 /// Retrieve a `sled` tree from a given path
@@ -370,5 +371,50 @@ impl Trees {
                 tag: tag.to_owned(),
             },
         )?)
+    }
+
+    /// Get number of books and number of quotes per author for all authors stored
+    pub fn get_author_counts(&self) -> Result<HashMap<String, (u64, u64)>, Error> {
+        let author_books: HashMap<String, u64> = self
+            .author_book_tree
+            .iter()
+            .map(|item| {
+                item.map_err(|_| QuothError::OutOfCheeseError {
+                    message: "sled PageCache Error".into(),
+                })
+                .and_then(|(a, books)| {
+                    match (utils::u8_to_str(&a), utils::split_values_string(&books)) {
+                        (Ok(a), Ok(books)) => Ok((a, books.len() as u64)),
+                        _ => Err(QuothError::OutOfCheeseError {
+                            message: "Corrupt author_book_tree".into(),
+                        }),
+                    }
+                })
+            })
+            .collect::<Result<_, _>>()?;
+        let author_quotes: HashMap<String, u64> = self
+            .author_quote_tree
+            .iter()
+            .map(|item| {
+                item.map_err(|_| QuothError::OutOfCheeseError {
+                    message: "sled PageCache Error".into(),
+                })
+                .and_then(|(a, quotes)| {
+                    match (utils::u8_to_str(&a), utils::split_indices_usize(&quotes)) {
+                        (Ok(a), Ok(quotes)) => Ok((a, quotes.len() as u64)),
+                        _ => Err(QuothError::OutOfCheeseError {
+                            message: "Corrupt author_quote_tree".into(),
+                        }),
+                    }
+                })
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(author_quotes
+            .into_iter()
+            .map(|(a, q)| {
+                let b = *author_books.get(&a).unwrap_or(&0);
+                (a, (b, q))
+            })
+            .collect())
     }
 }

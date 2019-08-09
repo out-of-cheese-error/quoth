@@ -2,7 +2,6 @@ use crate::config;
 use failure::Error;
 use path_abs::{FileRead, PathAbs, PathDir, PathFile};
 use serde_json;
-use std::fmt;
 
 /// Stores `current_quote_index`, number of quotes, authors, books, and tags
 #[derive(Serialize, Deserialize)]
@@ -12,16 +11,6 @@ pub struct Metadata {
     pub num_books: usize,
     pub num_authors: usize,
     pub num_tags: usize,
-}
-
-impl fmt::Display for Metadata {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "# Quotes: {}\n# Books: {}\n# Authors: {}\n# Tags: {}",
-            self.num_quotes, self.num_books, self.num_authors, self.num_tags
-        )
-    }
 }
 
 impl Metadata {

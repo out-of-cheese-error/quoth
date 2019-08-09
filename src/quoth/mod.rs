@@ -1,16 +1,14 @@
 mod database;
 mod metadata;
 mod quotes;
-pub mod stats;
 
 use crate::config;
 use crate::errors::QuothError;
 use crate::quoth::database::Trees;
 use crate::quoth::quotes::{Quote, TSVQuote};
 use crate::utils;
-use crate::quoth::stats::{Event, Events, Stats};
 
-use chrono::{DateTime, Utc};
+use chrono::{Date, DateTime, Datelike, Utc, MAX_DATE, MIN_DATE};
 use clap::{App, ArgMatches, Shell};
 use csv;
 use dirs;
@@ -31,7 +29,6 @@ use tui::layout::{Alignment, Constraint, Direction, Layout};
 use tui::style::{Color, Modifier, Style};
 use tui::widgets::{BarChart, Block, Borders, Paragraph, Row, Table, Text, Widget};
 use tui::Terminal;
-
 
 /// Makes config file (default ~/quoth.txt) with a single line containing the location of the quoth directory (default ~/.quoth)
 fn make_quoth_config_file() -> Result<(), Error> {
@@ -150,10 +147,9 @@ impl<'a> Quoth<'a> {
             self.delete_quote()
         } else if self.matches.is_present("change") {
             self.change_quote()
-        } else if self.matches.is_present("stats") {
-            self.display_stats()
         } else {
             match self.matches.subcommand() {
+                ("stats", Some(matches)) => self.display_stats(matches),
                 ("config", Some(matches)) => self.config(matches),
                 ("import", Some(matches)) => {
                     for quote in self.import(matches)? {
@@ -223,130 +219,6 @@ impl<'a> Quoth<'a> {
         Ok(())
     }
 
-    /// Uses termion and tui to display a dashboard with 4 components
-    /// 1. Number of quotes written per month as a bar chart
-    /// 2. Number of books read per month as a bar chart
-    /// 3. A table of the number of books and quotes corresponding to each author
-    /// 4. Total numbers of quotes, books, authors, and tags recorded in quoth
-    /// Use arrow keys to scroll the bar charts and the table
-    /// q to quit display
-    fn display_stats(&self) -> Result<(), Error> {
-        // Terminal initialization
-        let stdout = io::stdout().into_raw_mode()?;
-        let stdout = MouseTerminal::from(stdout);
-        let stdout = AlternateScreen::from(stdout);
-        let backend = TermionBackend::new(stdout);
-        let mut terminal = Terminal::new(backend)?;
-        terminal.hide_cursor()?;
-
-        // Setup event handlers
-        let events = Events::new();
-
-        // App
-        let bar_width = 5;
-        let num_rows = (terminal.size()?.height / 5 - 4) as usize;
-        let mut quoth_stats = Stats::from_quoth(self.quoth_dir, termwidth() / bar_width, num_rows)?;
-        loop {
-            terminal.draw(|mut f| {
-                let chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .margin(2)
-                    .constraints(
-                        [
-                            Constraint::Percentage(40),
-                            Constraint::Percentage(40),
-                            Constraint::Percentage(20),
-                        ]
-                            .as_ref(),
-                    )
-                    .split(f.size());
-
-                // Quote Stats
-                BarChart::default()
-                    .block(Block::default().title("Quotes").borders(Borders::ALL))
-                    .data(
-                        &quoth_stats.quote_counts
-                            [quoth_stats.start_index_bar..quoth_stats.end_index_bar]
-                            .iter()
-                            .map(|(m, x)| (m.as_str(), *x))
-                            .collect::<Vec<_>>(),
-                    )
-                    .bar_width(bar_width as u16)
-                    .max(quoth_stats.max_quotes)
-                    .style(Style::default().fg(Color::Gray))
-                    .value_style(Style::default().bg(Color::Black))
-                    .render(&mut f, chunks[0]);
-
-
-                // Book Stats
-                BarChart::default()
-                    .block(Block::default().title("Books").borders(Borders::ALL))
-                    .data(
-                        &quoth_stats.book_counts
-                            [quoth_stats.start_index_bar..quoth_stats.end_index_bar]
-                            .iter()
-                            .map(|(m, x)| (m.as_str(), *x))
-                            .collect::<Vec<_>>(),
-                    )
-                    .bar_width(bar_width as u16)
-                    .max(quoth_stats.max_books)
-                    .style(Style::default().fg(Color::Cyan))
-                    .value_style(Style::default().bg(Color::Black))
-                    .render(&mut f, chunks[1]);
-
-
-                {
-                    let chunks = Layout::default()
-                        .direction(Direction::Horizontal)
-                        .constraints([Constraint::Percentage(70), Constraint::Percentage(30)].as_ref())
-                        .split(chunks[2]);
-
-
-                    // Author Stats
-                    let row_style = Style::default().fg(Color::White);
-                    let header_style = Style::default().fg(Color::Blue).modifier(Modifier::BOLD);
-                    Table::new(
-                        vec!["Author", "Books", "Quotes"].into_iter(),
-                        quoth_stats.author_table
-                            [quoth_stats.start_index_table..quoth_stats.end_index_table]
-                            .iter()
-                            .map(|row| Row::StyledData(row.into_iter(), row_style)),
-                    )
-                        .header_style(header_style)
-                        .block(Block::default().title("Authors").borders(Borders::ALL))
-                        .widths(&[25, 5, 5])
-                        .render(&mut f, chunks[0]);
-
-
-                    // Total Stats
-                    Paragraph::new(vec![
-                        Text::styled(&format!("{}\n", utils::RAVEN), Style::default().modifier(Modifier::DIM)),
-                        Text::raw(&format!("# Quotes {}\n", quoth_stats.metadata.num_quotes) ),
-                        Text::styled(&format!("# Books {}\n", quoth_stats.metadata.num_books), Style::default().fg(Color::Cyan)),
-                        Text::styled(&format!("# Authors {}\n", quoth_stats.metadata.num_authors), Style::default().fg(Color::Blue)),
-                        Text::styled(&format!("# Tags {}\n", quoth_stats.metadata.num_tags), Style::default().modifier(Modifier::DIM)),
-                        Text::raw(&format!("\nScroll: arrow keys\nQuit: q\n")),
-                    ].iter())
-                        .block(Block::default().title("Total").borders(Borders::ALL))
-                        .alignment(Alignment::Center)
-                        .render(&mut f, chunks[1]);
-                }
-            })?;
-
-            match events.next()? {
-                Event::Input(input) => {
-                    if input == Key::Char('q') {
-                        break;
-                    } else {
-                        quoth_stats.update(input);
-                    }
-                }
-                _ => (),
-            }
-        }
-        Ok(())
-    }
-
     /// Filters a list of quotes by given author/book/tag/date
     fn filter_quotes(&self, filters: &Filters<'_>) -> Result<Vec<Quote>, Error> {
         let from_date = utils::date_start(filters.from_date);
@@ -360,9 +232,12 @@ impl<'a> Quoth<'a> {
                 &self.trees.get_book_quotes(book)?,
                 self.quoth_dir,
             )?),
-            (Some(_), Some(_)) => Err(QuothError::OutOfCheeseError {
-                message: "Can't filter by both author and book".into(),
-            })?,
+            (Some(_), Some(_)) => {
+                return Err(QuothError::OutOfCheeseError {
+                    message: "Can't filter by both author and book".into(),
+                }
+                .into())
+            }
             (None, None) => None,
         };
         match (filters.tag, quotes) {
@@ -609,6 +484,246 @@ impl<'a> Quoth<'a> {
                 message: "Can only handle JSON or TSV input".into(),
             }
             .into())
+        }
+    }
+
+    /// Uses termion and tui to display a dashboard with 4 components
+    /// 1. Number of quotes written per month as a bar chart
+    /// 2. Number of books read per month as a bar chart
+    /// 3. A table of the number of books and quotes corresponding to each author
+    /// 4. Total numbers of quotes, books, authors, and tags recorded in quoth
+    /// Use arrow keys to scroll the bar charts and the table
+    /// q to quit display
+    fn display_stats(&self, matches: &ArgMatches<'a>) -> Result<(), Error> {
+        let from_date = utils::get_argument_value("from", matches)?
+            .map(|date| utils::parse_date(date))
+            .transpose()?
+            .map(|date| date.and_hms(0, 0, 0))
+            .unwrap_or_else(|| MIN_DATE.and_hms(0, 0, 0));
+        let to_date = utils::get_argument_value("to", &matches)?
+            .map(|date| utils::parse_date(date))
+            .transpose()?
+            .map(|date| date.and_hms(23, 59, 59))
+            .unwrap_or_else(|| MAX_DATE.and_hms(23, 59, 59));
+
+        // Terminal initialization
+        let stdout = io::stdout().into_raw_mode()?;
+        let stdout = MouseTerminal::from(stdout);
+        let stdout = AlternateScreen::from(stdout);
+        let backend = TermionBackend::new(stdout);
+        let mut terminal = Terminal::new(backend)?;
+        terminal.hide_cursor()?;
+
+        // Setup event handlers
+        let events = utils::Events::new();
+
+        // Get counts
+        let bar_width = 5;
+        let num_rows = (terminal.size()?.height / 5 - 4) as usize;
+        let num_bars = termwidth() / bar_width;
+
+        let (book_counts, quote_counts) =
+            Quote::get_counts_per_month(from_date, to_date, self.quoth_dir)?;
+        let (max_books, max_quotes) = (
+            *book_counts.values().max().unwrap(),
+            *quote_counts.values().max().unwrap(),
+        );
+        let months: Vec<_> = quote_counts.keys().collect();
+        let (min_date, max_date) = (
+            **months.iter().min().unwrap(),
+            **months.iter().max().unwrap(),
+        );
+        let months = utils::get_months(min_date, max_date);
+
+        fn format_date(date: Date<Utc>) -> String {
+            let year = date.year().to_string().chars().skip(2).collect::<String>();
+            format!("{}-{}", date.month(), year)
+        }
+
+        let book_counts: Vec<(String, u64)> = months
+            .iter()
+            .map(|m| (format_date(*m), *(book_counts.get(m).unwrap_or(&0))))
+            .collect();
+        let quote_counts: Vec<(String, u64)> = months
+            .iter()
+            .map(|m| (format_date(*m), *(quote_counts.get(m).unwrap_or(&0))))
+            .collect();
+
+        let num_bars = num_bars.min(quote_counts.len());
+        let author_table = self.trees.get_author_counts()?;
+        let mut author_table: Vec<Vec<String>> = author_table
+            .into_iter()
+            .map(|(a, (b, q))| vec![a, b.to_string(), q.to_string()])
+            .collect();
+        author_table.sort();
+        let num_rows = num_rows.min(author_table.len());
+        let mut scrollers = Scrollers {
+            start_index_bar: 0,
+            end_index_bar: num_bars,
+            max_index_bar: quote_counts.len(),
+            num_bars,
+            start_index_table: 0,
+            end_index_table: num_rows,
+            max_index_table: author_table.len(),
+            num_rows,
+        };
+
+        loop {
+            terminal.draw(|mut f| {
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .margin(2)
+                    .constraints(
+                        [
+                            Constraint::Percentage(40),
+                            Constraint::Percentage(40),
+                            Constraint::Percentage(20),
+                        ]
+                        .as_ref(),
+                    )
+                    .split(f.size());
+
+                // Quote Stats
+                BarChart::default()
+                    .block(Block::default().title("Quotes").borders(Borders::ALL))
+                    .data(
+                        &quote_counts[scrollers.start_index_bar..scrollers.end_index_bar]
+                            .iter()
+                            .map(|(m, x)| (m.as_str(), *x))
+                            .collect::<Vec<_>>(),
+                    )
+                    .bar_width(bar_width as u16)
+                    .max(max_quotes)
+                    .style(Style::default().fg(Color::Gray))
+                    .value_style(Style::default().bg(Color::Black))
+                    .render(&mut f, chunks[0]);
+
+                // Book Stats
+                BarChart::default()
+                    .block(Block::default().title("Books").borders(Borders::ALL))
+                    .data(
+                        &book_counts[scrollers.start_index_bar..scrollers.end_index_bar]
+                            .iter()
+                            .map(|(m, x)| (m.as_str(), *x))
+                            .collect::<Vec<_>>(),
+                    )
+                    .bar_width(bar_width as u16)
+                    .max(max_books)
+                    .style(Style::default().fg(Color::Cyan))
+                    .value_style(Style::default().bg(Color::Black))
+                    .render(&mut f, chunks[1]);
+
+                {
+                    let chunks = Layout::default()
+                        .direction(Direction::Horizontal)
+                        .constraints(
+                            [Constraint::Percentage(70), Constraint::Percentage(30)].as_ref(),
+                        )
+                        .split(chunks[2]);
+
+                    // Author Stats
+                    let row_style = Style::default().fg(Color::White);
+                    let header_style = Style::default().fg(Color::Blue).modifier(Modifier::BOLD);
+                    Table::new(
+                        vec!["Author", "Books", "Quotes"].into_iter(),
+                        author_table[scrollers.start_index_table..scrollers.end_index_table]
+                            .iter()
+                            .map(|row| Row::StyledData(row.iter(), row_style)),
+                    )
+                    .header_style(header_style)
+                    .block(Block::default().title("Authors").borders(Borders::ALL))
+                    .widths(&[25, 5, 5])
+                    .render(&mut f, chunks[0]);
+
+                    // Total Stats
+                    Paragraph::new(
+                        vec![
+                            Text::styled(
+                                &format!("{}\n", utils::RAVEN),
+                                Style::default().modifier(Modifier::DIM),
+                            ),
+                            Text::raw(&format!("# Quotes {}\n", self.trees.metadata.num_quotes)),
+                            Text::styled(
+                                &format!("# Books {}\n", self.trees.metadata.num_books),
+                                Style::default().fg(Color::Cyan),
+                            ),
+                            Text::styled(
+                                &format!("# Authors {}\n", self.trees.metadata.num_authors),
+                                Style::default().fg(Color::Blue),
+                            ),
+                            Text::styled(
+                                &format!("# Tags {}\n", self.trees.metadata.num_tags),
+                                Style::default().modifier(Modifier::DIM),
+                            ),
+                            Text::raw("\nScroll: arrow keys\nQuit: q\n"),
+                        ]
+                        .iter(),
+                    )
+                    .block(Block::default().title("Total").borders(Borders::ALL))
+                    .alignment(Alignment::Center)
+                    .render(&mut f, chunks[1]);
+                }
+            })?;
+
+            if let utils::Event::Input(input) = events.next()? {
+                if input == Key::Char('q') {
+                    break;
+                } else {
+                    scrollers.update(input);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+struct Scrollers {
+    num_bars: usize,
+    start_index_bar: usize,
+    end_index_bar: usize,
+    max_index_bar: usize,
+    start_index_table: usize,
+    end_index_table: usize,
+    max_index_table: usize,
+    num_rows: usize,
+}
+
+impl Scrollers {
+    fn update(&mut self, key: Key) {
+        match key {
+            Key::Right => {
+                self.start_index_bar += 1;
+                self.end_index_bar += 1;
+                if self.end_index_bar >= self.max_index_bar {
+                    self.end_index_bar = self.max_index_bar;
+                }
+                if self.end_index_bar - self.start_index_bar < self.num_bars {
+                    self.start_index_bar = self.end_index_bar - self.num_bars;
+                }
+            }
+            Key::Left => {
+                if self.start_index_bar > 0 {
+                    self.start_index_bar -= 1;
+                    self.end_index_bar -= 1;
+                }
+            }
+            Key::Up => {
+                if self.start_index_table > 0 {
+                    self.start_index_table -= 1;
+                    self.end_index_table -= 1;
+                }
+            }
+            Key::Down => {
+                self.start_index_table += 1;
+                self.end_index_table += 1;
+                if self.end_index_table >= self.max_index_table {
+                    self.end_index_table = self.max_index_table;
+                }
+                if self.end_index_table - self.start_index_table < self.num_rows {
+                    self.start_index_table = self.end_index_table - self.num_rows;
+                }
+            }
+            _ => (),
         }
     }
 }
