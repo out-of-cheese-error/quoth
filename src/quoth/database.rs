@@ -132,32 +132,31 @@ impl Trees {
         Ok(quote.index)
     }
 
-    /// Delete a book
-    fn delete_book(&mut self, book_key: &[u8]) -> Result<(), Error> {
-        self.book_quote_tree()?.remove(book_key)?;
-        self.book_author_tree()?.remove(book_key)?;
-        Ok(())
-    }
-
     /// Delete an author
     fn delete_author(&mut self, author_key: &[u8]) -> Result<(), Error> {
         self.author_quote_tree()?.remove(author_key)?;
         let author = utils::u8_to_str(author_key)?;
+        let author_book_tree = self.author_book_tree()?;
         let books = utils::split_values_string(
-            &self
-                .author_book_tree()?
+            &author_book_tree
                 .get(author_key)?
                 .ok_or(QuothError::AuthorNotFound { author })?,
         )?;
+        let mut book_quote_batch = sled::Batch::default();
+        let mut book_author_batch = sled::Batch::default();
         for book in books {
-            self.delete_book(book.as_bytes())?;
+            let book_key = book.as_bytes();
+            book_author_batch.remove(book_key);
+            book_quote_batch.remove(book_key);
         }
-        self.author_book_tree()?.remove(author_key)?;
+        self.book_quote_tree()?.apply_batch(book_quote_batch)?;
+        self.book_author_tree()?.apply_batch(book_author_batch)?;
+        author_book_tree.remove(author_key)?;
         Ok(())
     }
 
     /// Delete a quote index from the tag-quote tree
-    fn delete_from_tag(&mut self, tag_key: &[u8], index: usize) -> Result<(), Error> {
+    fn delete_from_tag(&mut self, tag_key: &[u8], index: usize, batch: &mut sled::Batch) -> Result<(), Error> {
         let tag = utils::u8_to_str(tag_key)?;
         let new_indices: Vec<_> = utils::split_indices_usize(
             &self
@@ -169,10 +168,9 @@ impl Trees {
         .filter(|index_i| *index_i != index)
         .collect();
         if new_indices.is_empty() {
-            self.tag_quote_tree()?.remove(tag_key)?;
+            batch.remove(tag_key);
         } else {
-            self.tag_quote_tree()?
-                .insert(tag_key.to_vec(), utils::make_indices_string(&new_indices)?)?;
+            batch.insert(tag_key.to_vec(), utils::make_indices_string(&new_indices)?);
         }
         Ok(())
     }
@@ -235,9 +233,11 @@ impl Trees {
         let author_key = quote.author.as_bytes();
         let book_key = quote.book.as_bytes();
         self.delete_from_author_and_book(author_key, book_key, index)?;
+        let mut tag_batch = sled::Batch::default();
         for tag in quote.tags {
-            self.delete_from_tag(tag.as_bytes(), index)?;
+            self.delete_from_tag(tag.as_bytes(), index, &mut tag_batch)?;
         }
+        self.tag_quote_tree()?.apply_batch(tag_batch)?;
         self.metadata.write(quoth_dir)?;
         Ok(())
     }
@@ -254,9 +254,11 @@ impl Trees {
         let (old_author_key, old_book_key) =
             (old_quote.author.as_bytes(), old_quote.book.as_bytes());
         self.delete_from_author_and_book(old_author_key, old_book_key, index)?;
+        let mut tag_batch = sled::Batch::default();
         for tag in old_quote.tags {
-            self.delete_from_tag(tag.as_bytes(), index)?;
+            self.delete_from_tag(tag.as_bytes(), index, &mut tag_batch)?;
         }
+        self.tag_quote_tree()?.apply_batch(tag_batch)?;
         let (author_key, book_key) = (new_quote.author.as_bytes(), new_quote.book.as_bytes());
         let index_key = index.to_string();
         let index_key = index_key.as_bytes();
