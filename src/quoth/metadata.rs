@@ -1,7 +1,8 @@
-use crate::config;
 use failure::Error;
-use path_abs::{FileRead, PathAbs, PathDir, PathFile};
+use path_abs::{FileRead, PathAbs, PathDir, PathFile, PathInfo, PathOps};
 use serde_json;
+
+use crate::config;
 
 /// Stores `current_quote_index`, number of quotes, authors, books, and tags
 #[derive(Serialize, Deserialize)]
@@ -49,7 +50,7 @@ impl Metadata {
         if !PathAbs::new(quoth_dir.join(config::METADATA_PATH))?.exists() {
             Metadata::create(quoth_dir)
         } else {
-            Ok(serde_json::from_reader(FileRead::read(PathFile::new(
+            Ok(serde_json::from_reader(FileRead::open(PathFile::new(
                 quoth_dir.join(config::METADATA_PATH),
             )?)?)?)
         }

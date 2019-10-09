@@ -1,14 +1,16 @@
+use std::collections::HashMap;
+
+use chrono::{Date, Datelike, DateTime, Utc};
+use console::{Alignment, pad_str, style};
+use failure::Error;
+use path_abs::{FileRead, PathDir, PathFile, PathOps};
+use serde_json;
+use textwrap::{termwidth, Wrapper};
+
 use crate::config;
 use crate::errors::QuothError;
 use crate::quoth::metadata::Metadata;
 use crate::utils;
-use chrono::{Date, DateTime, Datelike, Utc};
-use console::{pad_str, style, Alignment};
-use failure::Error;
-use path_abs::{FileRead, PathDir, PathFile};
-use serde_json;
-use std::collections::HashMap;
-use textwrap::{termwidth, Wrapper};
 
 /// Stores information about a quote
 #[derive(Serialize, Deserialize, Debug)]
@@ -137,7 +139,7 @@ impl Quote {
     pub fn read_from_file(
         json_file: &PathFile,
     ) -> Result<impl Iterator<Item = serde_json::Result<Quote>>, Error> {
-        Ok(serde_json::Deserializer::from_reader(FileRead::read(json_file)?).into_iter::<Self>())
+        Ok(serde_json::Deserializer::from_reader(FileRead::open(json_file)?).into_iter::<Self>())
     }
 
     /// Read quotes from Quote file stored in config

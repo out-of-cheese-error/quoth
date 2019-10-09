@@ -1,24 +1,15 @@
-mod database;
-mod metadata;
-mod quotes;
+use std::collections::HashMap;
+use std::io;
 
-use crate::config;
-use crate::errors::QuothError;
-use crate::quoth::database::Trees;
-use crate::quoth::quotes::{Quote, TSVQuote};
-use crate::utils;
-
-use chrono::{Date, DateTime, Datelike, Utc, MAX_DATE, MIN_DATE};
+use chrono::{Date, Datelike, DateTime, MAX_DATE, MIN_DATE, Utc};
 use clap::{App, ArgMatches, Shell};
 use csv;
 use dirs;
 use failure::Error;
-use path_abs::{PathAbs, PathDir, PathFile};
+use path_abs::{PathAbs, PathDir, PathFile, PathInfo, PathOps};
 use rand::Rng;
 use regex::Regex;
 use serde_json;
-use std::collections::HashMap;
-use std::io;
 use termion::event::Key;
 use termion::input::MouseTerminal;
 use termion::raw::IntoRawMode;
@@ -27,8 +18,18 @@ use textwrap::termwidth;
 use tui::backend::TermionBackend;
 use tui::layout::{Alignment, Constraint, Direction, Layout};
 use tui::style::{Color, Modifier, Style};
-use tui::widgets::{BarChart, Block, Borders, Paragraph, Row, Table, Text, Widget};
 use tui::Terminal;
+use tui::widgets::{BarChart, Block, Borders, Paragraph, Row, Table, Text, Widget};
+
+use crate::config;
+use crate::errors::QuothError;
+use crate::quoth::database::Trees;
+use crate::quoth::quotes::{Quote, TSVQuote};
+use crate::utils;
+
+mod database;
+mod metadata;
+mod quotes;
 
 /// Makes config file (default ~/quoth.txt) with a single line containing the location of the quoth directory (default ~/.quoth)
 fn make_quoth_config_file() -> Result<(), Error> {
@@ -38,7 +39,7 @@ fn make_quoth_config_file() -> Result<(), Error> {
             config_file.write_str(
                 &PathDir::new(home_dir)?
                     .join(config::QUOTH_DIR_DEFAULT)
-                    .to_string(),
+                    .to_str().unwrap(),
             )?;
             Ok(())
         }

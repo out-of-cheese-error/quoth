@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::str;
 
 use failure::Error;
-use path_abs::PathDir;
+use path_abs::{PathDir, PathOps};
 use sled;
 
 use crate::config;
