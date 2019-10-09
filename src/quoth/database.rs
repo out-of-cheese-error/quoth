@@ -11,16 +11,6 @@ use crate::quoth::metadata::Metadata;
 use crate::quoth::quotes::Quote;
 use crate::utils;
 
-///// Retrieve a `sled` tree from a given path
-//fn get_tree(path: &PathDir) -> Result<sled::Tree, Error> {
-//    let config = sled::ConfigBuilder::new()
-//        .path(path)
-//        .merge_operator(merge_index)
-//        .build();
-//    let tree = sled::Tree::start(config)?;
-//    Ok(tree)
-//}
-
 /// If key exists, add value to existing values - join with a semicolon
 fn merge_index(_key: &[u8], old_indices: Option<&[u8]>, new_index: &[u8]) -> Option<Vec<u8>> {
     let mut ret = old_indices
@@ -45,17 +35,6 @@ fn set_sorted(tree: &mut sled::Tree, key: &[u8]) -> Result<(), Error> {
 /// Stores linkage information between authors, books, tags and quotes, along with quoth metadata
 pub struct Trees {
     pub db: sled::Db,
-    //    /// Links authors to the quotes they've authored
-//    pub author_quote_tree: sled::Tree,
-//    /// Links authors to the books they've authored
-//    pub author_book_tree: sled::Tree,
-//    /// Links books to the quotes they contain
-//    pub book_quote_tree: sled::Tree,
-//    /// Links books to their authors
-//    pub book_author_tree: sled::Tree,
-//    /// Links tags to the quotes they're associated with
-//    pub tag_quote_tree: sled::Tree,
-//    /// Metadata about stored quotes
     pub metadata: Metadata,
 }
 
@@ -64,22 +43,8 @@ impl Trees {
     pub fn clear(quoth_dir: &PathDir) -> Result<(), Error> {
         Metadata::clear(quoth_dir)?;
         PathDir::new(quoth_dir.join(config::DB_PATH))?.remove_all()?;
-//        PathDir::new(quoth_dir.join(config::AUTHOR_QUOTE_PATH))?.remove_all()?;
-//        PathDir::new(quoth_dir.join(config::AUTHOR_BOOK_PATH))?.remove_all()?;
-//        PathDir::new(quoth_dir.join(config::BOOK_QUOTE_PATH))?.remove_all()?;
-//        PathDir::new(quoth_dir.join(config::BOOK_AUTHOR_PATH))?.remove_all()?;
-//        PathDir::new(quoth_dir.join(config::TAG_QUOTE_PATH))?.remove_all()?;
         Ok(())
     }
-
-//    /// Copies a given tree to a new location
-//    fn copy_tree(old_tree: &sled::Tree, new_tree: &mut sled::Tree) -> Result<(), Error> {
-//        for key_value in old_tree {
-//            let (key, value) = key_value?;
-//            new_tree.insert(key, value)?;
-//        }
-//        Ok(())
-//    }
 
     pub fn author_quote_tree(&self) -> Result<sled::Tree, Error> {
         Ok(self.db.open_tree("author_quote")?)
@@ -107,14 +72,6 @@ impl Trees {
         Metadata::relocate(old_quoth_dir, new_quoth_dir)?;
         let new_trees = Trees::read(new_quoth_dir)?;
         new_trees.db.import(old_trees);
-//        Trees::copy_tree(
-//            &old_trees.author_quote_tree,
-//            &mut new_trees.author_quote_tree,
-//        )?;
-//        Trees::copy_tree(&old_trees.author_book_tree, &mut new_trees.author_book_tree)?;
-//        Trees::copy_tree(&old_trees.book_quote_tree, &mut new_trees.book_quote_tree)?;
-//        Trees::copy_tree(&old_trees.book_author_tree, &mut new_trees.book_author_tree)?;
-//        Trees::copy_tree(&old_trees.tag_quote_tree, &mut new_trees.tag_quote_tree)?;
         Trees::clear(old_quoth_dir)?;
         Ok(())
     }
@@ -125,32 +82,13 @@ impl Trees {
             .path(&PathDir::create_all(quoth_dir.join(config::DB_PATH))?)
             .build();
         let db = sled::Db::start(config)?;
-//        let names =  vec!["author_quote", "author_book", "book_quote", "book_author", "tag_quote"].into_iter().map(|n| n.to_owned()).collect();
-//        for name in names.iter() {
-//            db.open_tree(name)?;
-//        }
         Ok(Trees {
             db,
-//            author_quote_tree: get_tree(&PathDir::create_all(
-//                quoth_dir.join(config::AUTHOR_QUOTE_PATH),
-//            )?)?,
-//            author_book_tree: get_tree(&PathDir::create_all(
-//                quoth_dir.join(config::AUTHOR_BOOK_PATH),
-//            )?)?,
-//            book_quote_tree: get_tree(&PathDir::create_all(
-//                quoth_dir.join(config::BOOK_QUOTE_PATH),
-//            )?)?,
-//            book_author_tree: get_tree(&PathDir::create_all(
-//                quoth_dir.join(config::BOOK_AUTHOR_PATH),
-//            )?)?,
-//            tag_quote_tree: get_tree(&PathDir::create_all(
-//                quoth_dir.join(config::TAG_QUOTE_PATH),
-//            )?)?,
             metadata: Metadata::read(quoth_dir)?,
         })
     }
 
-    /// Add a book to the trees and change metadata accordingly
+    /// Add a book to the trees
     fn add_book(
         &mut self,
         author_key: &[u8],
@@ -163,11 +101,10 @@ impl Trees {
             .merge(book_key.to_vec(), index_key.to_vec())?;
         self.book_author_tree()?
             .merge(book_key.to_vec(), author_key.to_vec())?;
-//        self.metadata.increment_books();
         Ok(())
     }
 
-    /// Add an author and a book to the trees and change metadata accordingly
+    /// Add an author and a book to the trees
     fn add_author_and_book(
         &mut self,
         author_key: &[u8],
@@ -176,39 +113,6 @@ impl Trees {
     ) -> Result<(), Error> {
         self.author_quote_tree()?.merge(author_key.to_vec(), index_key.to_vec())?;
         self.add_book(author_key, book_key, index_key)?;
-//        if author_quote_tree.get(author_key)?.is_some() {
-//            author_quote_tree
-//                .merge(author_key.to_vec(), index_key.to_vec())?;
-//            if let Some(books_string) = self.author_book_tree()?.get(author_key)? {
-//                let books = utils::split_values_string(&books_string)?;
-//                if books.contains(&book) {
-//                    self.book_quote_tree()?
-//                        .merge(book_key.to_vec(), index_key.to_vec())?;
-//                } else {
-//                    self.add_book(author_key, book_key, index_key)?;
-//                }
-//            }
-//        } else {
-//            author_quote_tree
-//                .insert(author_key.to_vec(), index_key.to_vec())?;
-//            self.add_book(author_key, book_key, index_key)?;
-//            self.metadata.increment_authors();
-//        }
-        Ok(())
-    }
-
-    /// Add a tag to the trees and change metadata accordingly
-    fn add_tag(&mut self, tag_key: &[u8], index_key: &[u8]) -> Result<(), Error> {
-        self.tag_quote_tree()?.merge(tag_key.to_vec(), index_key.to_vec())?;
-//        let tag_quote_tree = self.tag_quote_tree()?;
-//        if tag_quote_tree.get(tag_key)?.is_some() {
-//            tag_quote_tree
-//                .merge(tag_key.to_vec(), index_key.to_vec())?;
-//        } else {
-//            tag_quote_tree
-//                .insert(tag_key.to_vec(), index_key.to_vec())?;
-//            self.metadata.increment_tags();
-//        }
         Ok(())
     }
 
@@ -222,7 +126,7 @@ impl Trees {
         self.add_author_and_book(author_key, book_key, index_key)?;
         for tag in &quote.tags {
             let tag_key = tag.as_bytes();
-            self.add_tag(tag_key, index_key)?;
+            self.tag_quote_tree()?.merge(tag_key.to_vec(), index_key.to_vec())?;
         }
         self.metadata.write(quoth_dir)?;
         Ok(quote.index)
@@ -232,7 +136,6 @@ impl Trees {
     fn delete_book(&mut self, book_key: &[u8]) -> Result<(), Error> {
         self.book_quote_tree()?.remove(book_key)?;
         self.book_author_tree()?.remove(book_key)?;
-//        self.metadata.decrement_books();
         Ok(())
     }
 
@@ -250,16 +153,8 @@ impl Trees {
             self.delete_book(book.as_bytes())?;
         }
         self.author_book_tree()?.remove(author_key)?;
-//        self.metadata.decrement_authors();
         Ok(())
     }
-
-//    /// Delete a tag
-//    fn delete_tag(&mut self, tag_key: &[u8]) -> Result<(), Error> {
-//        self.tag_quote_tree()?.remove(tag_key)?;
-////        self.metadata.decrement_tags();
-//        Ok(())
-//    }
 
     /// Delete a quote index from the tag-quote tree
     fn delete_from_tag(&mut self, tag_key: &[u8], index: usize) -> Result<(), Error> {
@@ -297,7 +192,6 @@ impl Trees {
         if new_indices.is_empty() {
             self.book_quote_tree()?.remove(book_key)?;
             self.book_author_tree()?.remove(book_key)?;
-//            self.delete_book(book_key)?;
         } else {
             self.book_quote_tree()?
                 .insert(book_key.to_vec(), utils::make_indices_string(&new_indices)?)?;
@@ -371,11 +265,9 @@ impl Trees {
         set_sorted(&mut self.book_quote_tree()?, book_key)?;
         for tag in &new_quote.tags {
             let tag_key = tag.as_bytes();
-            self.add_tag(tag_key, index_key)?;
+            self.tag_quote_tree()?.merge(tag_key.to_vec(), index_key.to_vec())?;
             set_sorted(&mut self.tag_quote_tree()?, tag_key)?;
         }
-
-        self.metadata.write(quoth_dir)?;
         Ok(())
     }
 
