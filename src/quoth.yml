@@ -163,7 +163,7 @@ subcommands:
         conflicts_with:
         - on
 - import:
-    about: Imports quotes from a JSON/TSV file
+      about: Imports quotes from a JSON/TSV file. 'Quote', 'Book', and 'Author' keys/columns are expected.
     display-order: 4 
     args:
     - json:

@@ -78,14 +78,14 @@ impl Trees {
 
     /// Reads `sled` trees and metadata file from the locations specified in config (makes new ones the first time)
     pub fn read(quoth_dir: &PathDir) -> Result<Self, Error> {
-        let config = sled::ConfigBuilder::new()
-            .path(&PathDir::create_all(quoth_dir.join(config::DB_PATH))?)
-            .build();
-        let db = sled::Db::start(config)?;
-        Ok(Trees {
-            db,
-            metadata: Metadata::read(quoth_dir)?,
-        })
+        let db = sled::Db::open(&PathDir::create_all(quoth_dir.join(config::DB_PATH))?)?;
+        let trees = Trees { db, metadata: Metadata::read(quoth_dir)? };
+        trees.author_book_tree()?.set_merge_operator(merge_index);
+        trees.author_quote_tree()?.set_merge_operator(merge_index);
+        trees.book_quote_tree()?.set_merge_operator(merge_index);
+        trees.book_author_tree()?.set_merge_operator(merge_index);
+        trees.tag_quote_tree()?.set_merge_operator(merge_index);
+        Ok(trees)
     }
 
     /// Add a book to the trees

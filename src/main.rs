@@ -24,8 +24,6 @@ fn main() -> Result<(), Error> {
 //    )?;
     let yaml = load_yaml!("quoth.yml");
     let matches = App::from_yaml(yaml).get_matches();
-    if let Err(err) = Quoth::start(matches) {
-        println!("{}", err);
-    }
+    Quoth::start(matches)?;
     Ok(())
 }
