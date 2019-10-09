@@ -81,23 +81,23 @@ impl Trees {
 //        Ok(())
 //    }
 
-    fn author_quote_tree(&self) -> Result<sled::Tree, Error> {
+    pub fn author_quote_tree(&self) -> Result<sled::Tree, Error> {
         Ok(self.db.open_tree("author_quote")?)
     }
 
-    fn author_book_tree(&self) -> Result<sled::Tree, Error> {
+    pub fn author_book_tree(&self) -> Result<sled::Tree, Error> {
         Ok(self.db.open_tree("author_book")?)
     }
 
-    fn book_quote_tree(&self) -> Result<sled::Tree, Error> {
+    pub fn book_quote_tree(&self) -> Result<sled::Tree, Error> {
         Ok(self.db.open_tree("book_quote")?)
     }
 
-    fn book_author_tree(&self) -> Result<sled::Tree, Error> {
+    pub fn book_author_tree(&self) -> Result<sled::Tree, Error> {
         Ok(self.db.open_tree("book_author")?)
     }
 
-    fn tag_quote_tree(&self) -> Result<sled::Tree, Error> {
+    pub fn tag_quote_tree(&self) -> Result<sled::Tree, Error> {
         Ok(self.db.open_tree("tag_quote")?)
     }
 
@@ -160,10 +160,10 @@ impl Trees {
         self.author_book_tree()?
             .merge(author_key.to_vec(), book_key.to_vec())?;
         self.book_quote_tree()?
-            .insert(book_key.to_vec(), index_key.to_vec())?;
+            .merge(book_key.to_vec(), index_key.to_vec())?;
         self.book_author_tree()?
-            .insert(book_key.to_vec(), author_key.to_vec())?;
-        self.metadata.increment_books();
+            .merge(book_key.to_vec(), author_key.to_vec())?;
+//        self.metadata.increment_books();
         Ok(())
     }
 
@@ -174,40 +174,41 @@ impl Trees {
         book_key: &[u8],
         index_key: &[u8],
     ) -> Result<(), Error> {
-        let book = str::from_utf8(book_key)?.to_owned();
-        let author_quote_tree = self.author_quote_tree()?;
-        if author_quote_tree.get(author_key)?.is_some() {
-            author_quote_tree
-                .merge(author_key.to_vec(), index_key.to_vec())?;
-            if let Some(books_string) = self.author_book_tree()?.get(author_key)? {
-                let books = utils::split_values_string(&books_string)?;
-                if books.contains(&book) {
-                    self.book_quote_tree()?
-                        .merge(book_key.to_vec(), index_key.to_vec())?;
-                } else {
-                    self.add_book(author_key, book_key, index_key)?;
-                }
-            }
-        } else {
-            author_quote_tree
-                .insert(author_key.to_vec(), index_key.to_vec())?;
-            self.add_book(author_key, book_key, index_key)?;
-            self.metadata.increment_authors();
-        }
+        self.author_quote_tree()?.merge(author_key.to_vec(), index_key.to_vec())?;
+        self.add_book(author_key, book_key, index_key)?;
+//        if author_quote_tree.get(author_key)?.is_some() {
+//            author_quote_tree
+//                .merge(author_key.to_vec(), index_key.to_vec())?;
+//            if let Some(books_string) = self.author_book_tree()?.get(author_key)? {
+//                let books = utils::split_values_string(&books_string)?;
+//                if books.contains(&book) {
+//                    self.book_quote_tree()?
+//                        .merge(book_key.to_vec(), index_key.to_vec())?;
+//                } else {
+//                    self.add_book(author_key, book_key, index_key)?;
+//                }
+//            }
+//        } else {
+//            author_quote_tree
+//                .insert(author_key.to_vec(), index_key.to_vec())?;
+//            self.add_book(author_key, book_key, index_key)?;
+//            self.metadata.increment_authors();
+//        }
         Ok(())
     }
 
     /// Add a tag to the trees and change metadata accordingly
     fn add_tag(&mut self, tag_key: &[u8], index_key: &[u8]) -> Result<(), Error> {
-        let tag_quote_tree = self.tag_quote_tree()?;
-        if tag_quote_tree.get(tag_key)?.is_some() {
-            tag_quote_tree
-                .merge(tag_key.to_vec(), index_key.to_vec())?;
-        } else {
-            tag_quote_tree
-                .insert(tag_key.to_vec(), index_key.to_vec())?;
-            self.metadata.increment_tags();
-        }
+        self.tag_quote_tree()?.merge(tag_key.to_vec(), index_key.to_vec())?;
+//        let tag_quote_tree = self.tag_quote_tree()?;
+//        if tag_quote_tree.get(tag_key)?.is_some() {
+//            tag_quote_tree
+//                .merge(tag_key.to_vec(), index_key.to_vec())?;
+//        } else {
+//            tag_quote_tree
+//                .insert(tag_key.to_vec(), index_key.to_vec())?;
+//            self.metadata.increment_tags();
+//        }
         Ok(())
     }
 
@@ -231,7 +232,7 @@ impl Trees {
     fn delete_book(&mut self, book_key: &[u8]) -> Result<(), Error> {
         self.book_quote_tree()?.remove(book_key)?;
         self.book_author_tree()?.remove(book_key)?;
-        self.metadata.decrement_books();
+//        self.metadata.decrement_books();
         Ok(())
     }
 
@@ -249,16 +250,16 @@ impl Trees {
             self.delete_book(book.as_bytes())?;
         }
         self.author_book_tree()?.remove(author_key)?;
-        self.metadata.decrement_authors();
+//        self.metadata.decrement_authors();
         Ok(())
     }
 
-    /// Delete a tag
-    fn delete_tag(&mut self, tag_key: &[u8]) -> Result<(), Error> {
-        self.tag_quote_tree()?.remove(tag_key)?;
-        self.metadata.decrement_tags();
-        Ok(())
-    }
+//    /// Delete a tag
+//    fn delete_tag(&mut self, tag_key: &[u8]) -> Result<(), Error> {
+//        self.tag_quote_tree()?.remove(tag_key)?;
+////        self.metadata.decrement_tags();
+//        Ok(())
+//    }
 
     /// Delete a quote index from the tag-quote tree
     fn delete_from_tag(&mut self, tag_key: &[u8], index: usize) -> Result<(), Error> {
@@ -273,7 +274,7 @@ impl Trees {
         .filter(|index_i| *index_i != index)
         .collect();
         if new_indices.is_empty() {
-            self.delete_tag(tag_key)?;
+            self.tag_quote_tree()?.remove(tag_key)?;
         } else {
             self.tag_quote_tree()?
                 .insert(tag_key.to_vec(), utils::make_indices_string(&new_indices)?)?;
@@ -294,7 +295,9 @@ impl Trees {
         .filter(|index_i| *index_i != index)
         .collect();
         if new_indices.is_empty() {
-            self.delete_book(book_key)?;
+            self.book_quote_tree()?.remove(book_key)?;
+            self.book_author_tree()?.remove(book_key)?;
+//            self.delete_book(book_key)?;
         } else {
             self.book_quote_tree()?
                 .insert(book_key.to_vec(), utils::make_indices_string(&new_indices)?)?;

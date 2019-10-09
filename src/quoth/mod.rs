@@ -568,7 +568,10 @@ impl<'a> Quoth<'a> {
             max_index_table: author_table.len(),
             num_rows,
         };
-
+        let (num_quotes, num_books, num_authors, num_tags) = (self.trees.metadata.num_quotes,
+                                                              self.trees.book_quote_tree()?.len(),
+                                                              self.trees.author_quote_tree()?.len(),
+                                                              self.trees.tag_quote_tree()?.len());
         loop {
             terminal.draw(|mut f| {
                 let chunks = Layout::default()
@@ -637,23 +640,24 @@ impl<'a> Quoth<'a> {
                     .render(&mut f, chunks[0]);
 
                     // Total Stats
+
                     Paragraph::new(
                         vec![
                             Text::styled(
                                 &format!("{}\n", utils::RAVEN),
                                 Style::default().modifier(Modifier::DIM),
                             ),
-                            Text::raw(&format!("# Quotes {}\n", self.trees.metadata.num_quotes)),
+                            Text::raw(&format!("# Quotes {}\n", num_quotes)),
                             Text::styled(
-                                &format!("# Books {}\n", self.trees.metadata.num_books),
+                                &format!("# Books {}\n", num_books),
                                 Style::default().fg(Color::Cyan),
                             ),
                             Text::styled(
-                                &format!("# Authors {}\n", self.trees.metadata.num_authors),
+                                &format!("# Authors {}\n", num_authors),
                                 Style::default().fg(Color::Blue),
                             ),
                             Text::styled(
-                                &format!("# Tags {}\n", self.trees.metadata.num_tags),
+                                &format!("# Tags {}\n", num_tags),
                                 Style::default().modifier(Modifier::DIM),
                             ),
                             Text::raw("\nScroll: arrow keys\nQuit: q\n"),
