@@ -297,7 +297,7 @@ pub fn read_quotes_database(
         let quote = record.get(0);
         let author_book = record.get(1);
         if let (Some(quote), Some(author_book)) = (quote, author_book) {
-            let author_book = author_book.split(",").collect::<Vec<_>>();
+            let author_book = author_book.split(',').collect::<Vec<_>>();
             // Filters out book-less quotes
             if author_book.len() >= 2 {
                 quote_db
