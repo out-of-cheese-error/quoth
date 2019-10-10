@@ -8,7 +8,6 @@ use sled;
 
 use crate::config;
 use crate::errors::QuothError;
-//use crate::quoth::metadata::Metadata;
 use crate::quoth::quotes::Quote;
 use crate::utils;
 
@@ -43,10 +42,6 @@ pub struct Trees {
 impl Trees {
     /// Removes all `sled` trees
     pub fn clear(quoth_dir: &PathDir) -> Result<(), Error> {
-//        let db = sled::Db::open(&PathDir::create_all(quoth_dir.join(config::DB_PATH))?)?;
-//        for name in db.tree_names() {
-//            db.drop_tree(&name)?;
-//        }
         PathDir::new(quoth_dir.join(config::DB_PATH))?.remove_all()?;
         Ok(())
     }
