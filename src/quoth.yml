@@ -17,6 +17,13 @@ args:
     value_name: INDEX
     takes_value: true
 
+- show:
+    help: Shows quote at <INDEX>
+    short: s
+    long: show
+    value_name: INDEX
+    takes_value: true
+
 subcommands:
 - search:
     about: Finds quotes matching a pattern
@@ -71,51 +78,51 @@ subcommands:
         conflicts_with:
         - on
 - list:
-      about: Lists quotes
-      display-order: 2
-      args:
-      - from:
-            long: from
-            value_name: DATE
-            help: Quotes from <DATE>
-      - to:
-          long: to
-          value_name: DATE
-          help: Quotes till <DATE>
-      - on:
-          long: on
-          value_name: DATE
-          help: Quotes on <DATE>
-      - author:
-            short: a
-            long: author
-            value_name: AUTHOR
-            takes_value: true
-            help: Quotes by <AUTHOR>
-            conflicts_with:
-              - book
-      - book:
-            long: book
-            short: b
-            value_name: BOOK
-            takes_value: true
-            help: Quotes from <BOOK>
-            conflicts_with:
-              - author
-      - tag:
-            long: tag
-            short: t
-            takes_value: true
-            value_name: TAG
-            help: Quotes with <TAG>
-      groups:
-          - date-range:
-              args:
-                - from
-                - to
-              multiple: true
-              conflicts_with:
-                - on
+    about: Lists quotes
+    display-order: 2
+    args:
+    - from:
+        long: from
+        value_name: DATE
+        help: Quotes from <DATE>
+    - to:
+        long: to
+        value_name: DATE
+        help: Quotes till <DATE>
+    - on:
+        long: on
+        value_name: DATE
+        help: Quotes on <DATE>
+    - author:
+        short: a
+        long: author
+        value_name: AUTHOR
+        takes_value: true
+        help: Quotes by <AUTHOR>
+        conflicts_with:
+        - book
+    - book:
+        long: book
+        short: b
+        value_name: BOOK
+        takes_value: true
+        help: Quotes from <BOOK>
+        conflicts_with:
+        - author
+    - tag:
+        long: tag
+        short: t
+        takes_value: true
+        value_name: TAG
+        help: Quotes with <TAG>
+    groups:
+    - date-range:
+        args:
+        - from
+        - to
+        multiple: true
+        conflicts_with:
+        - on
 - random:
     about: Displays a random quote
     display-order: 3
@@ -163,8 +170,8 @@ subcommands:
         conflicts_with:
         - on
 - import:
-      about: Imports quotes from a JSON/TSV file. Quote, Book, and Author keys/columns are expected
-      display-order: 4
+    about: Imports quotes from a JSON/TSV file. Quote, Book, and Author keys/columns are expected
+    display-order: 4
     args:
     - json:
         short: j
@@ -172,17 +179,17 @@ subcommands:
         value_name: JSON_FILE
         takes_value: true
         conflicts_with:
-          - tsv
+        - tsv
     - tsv:
         short: t
         long: tsv
         value_name: TSV_FILE
         takes_value: true
         conflicts_with:
-          - json
+        - json
 - export:
-      help: Saves (optionally filtered) quotes to a TSV file
-      display-order: 5
+    help: Saves (optionally filtered) quotes to a TSV file
+    display-order: 5
     args:
     - filename:
         short: o
@@ -270,14 +277,14 @@ subcommands:
         value_name: SHELL
         short: c
         long: completions
-        possible_values: 
-            - zsh
-            - bash
-            - fish
+        possible_values:
+        - zsh
+        - bash
+        - fish
     groups:
-      - change:
-          args:
-            - clear
-            - dir
-            - completions
-          required: true
+    - change:
+        args:
+        - clear
+        - dir
+        - completions
+        required: true

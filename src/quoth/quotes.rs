@@ -1,15 +1,11 @@
 use anyhow::Error;
-use chrono::{Date, Datelike, DateTime, Utc};
+use bincode;
+use chrono::{DateTime, Utc};
 use console::{Alignment, pad_str, style};
-use path_abs::{FileRead, PathDir, PathFile, PathOps};
+use path_abs::{FileRead, PathFile};
 use serde_json;
 use textwrap::{termwidth, Wrapper};
 
-use std::collections::HashMap;
-
-use crate::config;
-use crate::errors::QuothError;
-use crate::quoth::metadata::Metadata;
 use crate::utils;
 
 /// Stores information about a quote
@@ -127,12 +123,12 @@ impl Quote {
         Ok(Quote::new(index, &title, &author, &tags, date, quote_text))
     }
 
-    /// Write quote to Quotes JSON file
-    fn write(&self, quoth_dir: &PathDir) -> Result<(), Error> {
-        let quote_json = serde_json::to_string(self)?;
-        let quote_file = PathFile::create(quoth_dir.join(config::QUOTE_PATH))?;
-        quote_file.append_str(&quote_json)?;
-        Ok(())
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        Ok(bincode::serialize(&self)?)
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        Ok(bincode::deserialize(bytes)?)
     }
 
     /// Read quotes from a JSON file and return consumable iterator
@@ -140,157 +136,6 @@ impl Quote {
         json_file: &PathFile,
     ) -> Result<impl Iterator<Item = serde_json::Result<Quote>>, Error> {
         Ok(serde_json::Deserializer::from_reader(FileRead::open(json_file)?).into_iter::<Self>())
-    }
-
-    /// Read quotes from Quote file stored in config
-    fn read(quoth_dir: &PathDir) -> Result<impl Iterator<Item = serde_json::Result<Quote>>, Error> {
-        Quote::read_from_file(&PathFile::new(quoth_dir.join(config::QUOTE_PATH))?)
-    }
-
-    /// Add a quote: write it to the quote file, increment the `current_quote_index` and the number of quotes
-    pub fn add(&self, metadata: &mut Metadata, quoth_dir: &PathDir) -> Result<(), Error> {
-        self.write(quoth_dir)?;
-        metadata.increment_quote_index();
-        metadata.increment_quotes();
-        Ok(())
-    }
-
-    /// Retrieve a quote by index
-    pub fn retrieve(index: usize, quoth_dir: &PathDir) -> Result<Self, Error> {
-        let quote_stream = Quote::read(quoth_dir)?;
-        for quote in quote_stream {
-            let quote = quote?;
-            if quote.index == index {
-                return Ok(quote);
-            }
-        }
-        Err(QuothError::QuoteNotFound { index }.into())
-    }
-
-    /// Retrieve many quotes given indices
-    pub fn retrieve_many(indices: &[usize], quoth_dir: &PathDir) -> Result<Vec<Self>, Error> {
-        let mut indices = indices.to_vec().into_iter().peekable();
-        let mut quote_stream = Quote::read(quoth_dir)?;
-        let mut quotes = Vec::new();
-        while let Some(index) = indices.peek() {
-            let quote = quote_stream
-                .next()
-                .ok_or(QuothError::QuoteNotFound { index: *index })??;
-            if quote.index == *index {
-                quotes.push(quote);
-                indices.next().ok_or(QuothError::OutOfCheeseError {
-                    message: "no more indices".into(),
-                })?;
-            }
-        }
-        Ok(quotes)
-    }
-
-    /// Remove quote file (Clears quotes)
-    pub fn clear(quoth_dir: &PathDir) -> Result<(), Error> {
-        PathFile::new(quoth_dir.join(config::QUOTE_PATH))?.remove()?;
-        Ok(())
-    }
-
-    /// Change location of quote file
-    pub fn relocate(old_quoth_dir: &PathDir, new_quoth_dir: &PathDir) -> Result<(), Error> {
-        PathFile::new(old_quoth_dir.join(config::QUOTE_PATH))?
-            .rename(PathFile::create(new_quoth_dir.join(config::QUOTE_PATH))?)?;
-        Ok(())
-    }
-
-    /// Delete a quote by index
-    pub fn delete(
-        index: usize,
-        metadata: &mut Metadata,
-        quoth_dir: &PathDir,
-    ) -> Result<Option<Self>, Error> {
-        let quote_stream = Quote::read(quoth_dir)?;
-        let mut quote = None;
-        Quote::clear(quoth_dir)?;
-        for quote_i in quote_stream {
-            let quote_i = quote_i?;
-            if quote_i.index == index {
-                quote = Some(quote_i);
-            } else {
-                quote_i.write(quoth_dir)?;
-            }
-        }
-        if quote.is_some() {
-            metadata.decrement_quotes();
-        }
-        Ok(quote)
-    }
-
-    /// Change a quote by index
-    pub fn change(
-        index: usize,
-        new_quote: &Self,
-        quoth_dir: &PathDir,
-    ) -> Result<Option<Self>, Error> {
-        let quote_stream = Quote::read(quoth_dir)?;
-        let mut old_quote = None;
-        Quote::clear(quoth_dir)?;
-        for quote_i in quote_stream {
-            let quote_i = quote_i?;
-            if quote_i.index == index {
-                old_quote = Some(quote_i);
-                new_quote.write(quoth_dir)?;
-            } else {
-                quote_i.write(quoth_dir)?;
-            }
-        }
-        Ok(old_quote)
-    }
-
-    /// List quotes in date range
-    pub fn list_in_date_range(
-        from_date: DateTime<Utc>,
-        to_date: DateTime<Utc>,
-        quoth_dir: &PathDir,
-    ) -> Result<Vec<Quote>, Error> {
-        let quotes: Result<Vec<Quote>, serde_json::Error> = Quote::read(quoth_dir)?.collect();
-        Ok(quotes?
-            .into_iter()
-            .filter(|quote| quote.in_date_range(from_date, to_date))
-            .collect())
-    }
-
-    pub fn get_counts_per_month(
-        from_date: DateTime<Utc>,
-        to_date: DateTime<Utc>,
-        quoth_dir: &PathDir,
-    ) -> Result<(HashMap<Date<Utc>, u64>, HashMap<Date<Utc>, u64>), Error> {
-        let mut book_dates = HashMap::new();
-        let mut quote_counts = HashMap::new();
-        for quote in Quote::list_in_date_range(from_date, to_date, quoth_dir)? {
-            *quote_counts
-                .entry(
-                    quote
-                        .date
-                        .date()
-                        .with_day(1)
-                        .ok_or(QuothError::OutOfCheeseError {
-                            message: "This month doesn't have a first day".into(),
-                        })?,
-                )
-                .or_insert(0) += 1;
-            book_dates.insert(
-                quote.book,
-                quote
-                    .date
-                    .date()
-                    .with_day(1)
-                    .ok_or(QuothError::OutOfCheeseError {
-                        message: "This month doesn't have a first day".into(),
-                    })?,
-            );
-        }
-        let mut book_counts = HashMap::new();
-        for (_, month) in book_dates {
-            *book_counts.entry(month).or_insert(0) += 1;
-        }
-        Ok((quote_counts, book_counts))
     }
 
     /// Filters quotes in date range

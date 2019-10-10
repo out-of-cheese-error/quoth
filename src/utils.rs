@@ -1,3 +1,10 @@
+use std::collections::HashMap;
+use std::io;
+use std::str;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+
 use anyhow::Error;
 use chrono::{Date, Datelike, DateTime, MAX_DATE, MIN_DATE, Utc};
 use chrono_english::{Dialect, parse_date_string};
@@ -8,13 +15,6 @@ use path_abs::PathFile;
 use serde_json;
 use termion::event::Key;
 use termion::input::TermRead;
-
-use std::collections::HashMap;
-use std::io;
-use std::str;
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
 
 use crate::config;
 use crate::errors::QuothError;
@@ -57,7 +57,6 @@ pub fn split_values_string(index_list: &[u8]) -> Result<Vec<String>, Error> {
     let index_list_string = str::from_utf8(index_list)?;
     Ok(index_list_string
         .split(str::from_utf8(&[config::SEMICOLON])?)
-//        .filter(|s| s.len() > 0)
         .map(|s| s.to_string())
         .collect())
 }
@@ -67,7 +66,6 @@ pub fn split_indices_usize(index_list: &[u8]) -> Result<Vec<usize>, Error> {
     let index_list_string = str::from_utf8(index_list)?;
     Ok(index_list_string
         .split(str::from_utf8(&[config::SEMICOLON])?)
-//        .filter(|s| s.len() > 0)
         .map(|word: &str| word.parse::<usize>())
         .collect::<Result<Vec<_>, _>>()?)
 }

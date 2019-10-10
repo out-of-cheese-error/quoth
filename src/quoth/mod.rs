@@ -1,4 +1,7 @@
-use anyhow::Error;
+use std::collections::HashMap;
+use std::io;
+
+use anyhow::{Context, Error};
 use chrono::{Date, Datelike, DateTime, MAX_DATE, MIN_DATE, Utc};
 use clap::{App, ArgMatches, Shell};
 use csv;
@@ -18,9 +21,6 @@ use tui::style::{Color, Modifier, Style};
 use tui::Terminal;
 use tui::widgets::{BarChart, Block, Borders, Paragraph, Row, Table, Text, Widget};
 
-use std::collections::HashMap;
-use std::io;
-
 use crate::config;
 use crate::errors::QuothError;
 use crate::quoth::database::Trees;
@@ -28,7 +28,6 @@ use crate::quoth::quotes::{Quote, TSVQuote};
 use crate::utils;
 
 mod database;
-mod metadata;
 mod quotes;
 
 /// Makes config file (default ~/quoth.txt) with a single line containing the location of the quoth directory (default ~/.quoth)
@@ -39,7 +38,8 @@ fn make_quoth_config_file() -> Result<(), Error> {
             config_file.write_str(
                 &PathDir::new(home_dir)?
                     .join(config::QUOTH_DIR_DEFAULT)
-                    .to_str().unwrap(),
+                    .to_str()
+                    .unwrap(),
             )?;
             Ok(())
         }
@@ -146,15 +146,17 @@ impl<'a> Quoth<'a> {
     fn run(&mut self) -> Result<(), Error> {
         if self.matches.is_present("delete") {
             self.delete_quote()
+        } else if self.matches.is_present("show") {
+            self.show_quote()
         } else if self.matches.is_present("change") {
             self.change_quote()
         } else {
             match self.matches.subcommand() {
-                ("stats", Some(matches)) => self.display_stats(matches),
+                ("stats", Some(matches)) => self.stats(matches),
                 ("config", Some(matches)) => self.config(matches),
                 ("import", Some(matches)) => {
                     for quote in self.import(matches)? {
-                        self.trees.add_quote(&quote, self.quoth_dir)?;
+                        self.trees.add_quote(&quote)?;
                     }
                     Ok(())
                 }
@@ -198,10 +200,10 @@ impl<'a> Quoth<'a> {
 
     /// Adds a new quote
     fn quoth(&mut self) -> Result<(), Error> {
-        let quote = Quote::from_user(self.trees.metadata.get_quote_index() + 1, None)?;
+        let quote = Quote::from_user(self.trees.get_quote_index()? + 1, None)?;
         println!(
             "Added quote #{}",
-            self.trees.add_quote(&quote, self.quoth_dir)?
+            self.trees.add_quote(&quote)?
         );
         Ok(())
     }
@@ -213,9 +215,9 @@ impl<'a> Quoth<'a> {
                 message: "Argument change not used".into(),
             })?
             .parse::<usize>()?;
-        let old_quote = Quote::retrieve(index, self.quoth_dir)?;
+        let old_quote = self.trees.get_quote(index)?;
         let new_quote = Quote::from_user(index, Some(old_quote))?;
-        self.trees.change_quote(index, &new_quote, self.quoth_dir)?;
+        self.trees.change_quote(index, &new_quote)?;
         println!("Quote #{} changed", index);
         Ok(())
     }
@@ -225,13 +227,11 @@ impl<'a> Quoth<'a> {
         let from_date = utils::date_start(filters.from_date);
         let to_date = utils::date_end(filters.to_date);
         let quotes: Option<Vec<_>> = match (filters.author, filters.book) {
-            (Some(author), None) => Some(Quote::retrieve_many(
+            (Some(author), None) => Some(self.trees.get_quotes(
                 &self.trees.get_author_quotes(author)?,
-                self.quoth_dir,
             )?),
-            (None, Some(book)) => Some(Quote::retrieve_many(
+            (None, Some(book)) => Some(self.trees.get_quotes(
                 &self.trees.get_book_quotes(book)?,
-                self.quoth_dir,
             )?),
             (Some(_), Some(_)) => {
                 return Err(QuothError::OutOfCheeseError {
@@ -247,13 +247,23 @@ impl<'a> Quoth<'a> {
                 .filter(|quote| quote.has_tag(tag) && quote.in_date_range(from_date, to_date))
                 .collect()),
             (Some(tag), None) => Quote::filter_in_date_range(
-                Quote::retrieve_many(&self.trees.get_tag_quotes(tag)?, self.quoth_dir)?,
+                self.trees.get_quotes(&self.trees.get_tag_quotes(tag)?)?,
                 from_date,
                 to_date,
             ),
             (None, Some(quotes)) => Quote::filter_in_date_range(quotes, from_date, to_date),
-            (None, None) => Quote::list_in_date_range(from_date, to_date, self.quoth_dir),
+            (None, None) => self.trees.list_quotes_in_date_range(from_date, to_date),
         }
+    }
+
+    /// Shows a quote matching a given index
+    fn show_quote(&self) -> Result<(), Error> {
+        let index =
+            utils::get_argument_value("index", &self.matches)?.ok_or(QuothError::OutOfCheeseError {
+                message: "Argument pattern not used".into(),
+            })?.parse::<usize>().with_context(|| format!("Given index is not a number"))?;
+        self.trees.get_quote(index)?.pretty_print();
+        Ok(())
     }
 
     /// Lists quotes (optionally filtered)
@@ -306,7 +316,6 @@ impl<'a> Quoth<'a> {
         }
         if sure_delete == "Y" {
             Trees::clear(self.quoth_dir)?;
-            Quote::clear(self.quoth_dir)?;
             Ok(())
         } else {
             Err(QuothError::DoingNothing {
@@ -330,7 +339,6 @@ impl<'a> Quoth<'a> {
             .into());
         }
         Trees::relocate(self.quoth_dir, &new_dir_path)?;
-        Quote::relocate(self.quoth_dir, &new_dir_path)?;
         change_quoth_dir(new_dir)?;
         let mut delete_old_dir;
         loop {
@@ -369,7 +377,7 @@ impl<'a> Quoth<'a> {
         }
         if sure_delete == "Y" {
             self.trees
-                .delete_quote(index.parse::<usize>()?, self.quoth_dir)?;
+                .delete_quote(index.parse::<usize>()?)?;
             println!("Quote #{} deleted", index);
             Ok(())
         } else {
@@ -436,7 +444,7 @@ impl<'a> Quoth<'a> {
                 .map(|h| quoth_headers.get(h.to_ascii_uppercase().as_str()))
                 .collect();
             let mut quotes = Vec::new();
-            let mut quote_index = self.trees.metadata.get_quote_index() + 1;
+            let mut quote_index = self.trees.get_quote_index()? + 1;
             if [0, 1, 4].iter().all(|x| header_indices.contains(&Some(x))) {
                 for record in reader.records() {
                     let mut quote_data = ("", "", "", Utc::now(), String::new());
@@ -495,7 +503,7 @@ impl<'a> Quoth<'a> {
     /// 4. Total numbers of quotes, books, authors, and tags recorded in quoth
     /// Use arrow keys to scroll the bar charts and the table
     /// q to quit display
-    fn display_stats(&self, matches: &ArgMatches<'a>) -> Result<(), Error> {
+    fn stats(&self, matches: &ArgMatches<'a>) -> Result<(), Error> {
         let from_date = utils::get_argument_value("from", matches)?
             .map(|date| utils::parse_date(date))
             .transpose()?
@@ -507,7 +515,7 @@ impl<'a> Quoth<'a> {
             .map(|date| date.and_hms(23, 59, 59))
             .unwrap_or_else(|| MAX_DATE.and_hms(23, 59, 59));
 
-//         Terminal initialization
+        //         Terminal initialization
         let stdout = io::stdout().into_raw_mode()?;
         let stdout = MouseTerminal::from(stdout);
         let stdout = AlternateScreen::from(stdout);
@@ -515,16 +523,16 @@ impl<'a> Quoth<'a> {
         let mut terminal = Terminal::new(backend)?;
         terminal.hide_cursor()?;
 
-//         Setup event handlers
+        //         Setup event handlers
         let events = utils::Events::new();
 
-//         Get counts
+        //         Get counts
         let bar_width = 5;
         let num_rows = (terminal.size()?.height / 5 - 4) as usize;
         let num_bars = termwidth() / bar_width;
 
-        let (book_counts, quote_counts) =
-            Quote::get_counts_per_month(from_date, to_date, self.quoth_dir)?;
+        let (quote_counts, book_counts) =
+            self.trees.get_quote_and_book_counts_per_month(from_date, to_date)?;
         let (max_books, max_quotes) = (
             *book_counts.values().max().unwrap(),
             *quote_counts.values().max().unwrap(),
@@ -567,10 +575,12 @@ impl<'a> Quoth<'a> {
             max_index_table: author_table.len(),
             num_rows,
         };
-        let (num_quotes, num_books, num_authors, num_tags) = (self.trees.metadata.num_quotes,
-                                                              self.trees.book_quote_tree()?.len(),
-                                                              self.trees.author_quote_tree()?.len(),
-                                                              self.trees.tag_quote_tree()?.len());
+        let (num_quotes, num_books, num_authors, num_tags) = (
+            self.trees.quote_tree()?.len(),
+            self.trees.book_quote_tree()?.len(),
+            self.trees.author_quote_tree()?.len(),
+            self.trees.tag_quote_tree()?.len(),
+        );
         loop {
             terminal.draw(|mut f| {
                 let chunks = Layout::default()
@@ -731,3 +741,4 @@ impl Scrollers {
         }
     }
 }
+
