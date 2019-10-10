@@ -1,11 +1,8 @@
-use std::collections::HashMap;
-use std::io;
-
+use anyhow::Error;
 use chrono::{Date, Datelike, DateTime, MAX_DATE, MIN_DATE, Utc};
 use clap::{App, ArgMatches, Shell};
 use csv;
 use dirs;
-use failure::Error;
 use path_abs::{PathAbs, PathDir, PathFile, PathInfo, PathOps};
 use rand::Rng;
 use regex::Regex;
@@ -20,6 +17,9 @@ use tui::layout::{Alignment, Constraint, Direction, Layout};
 use tui::style::{Color, Modifier, Style};
 use tui::Terminal;
 use tui::widgets::{BarChart, Block, Borders, Paragraph, Row, Table, Text, Widget};
+
+use std::collections::HashMap;
+use std::io;
 
 use crate::config;
 use crate::errors::QuothError;
@@ -507,7 +507,7 @@ impl<'a> Quoth<'a> {
             .map(|date| date.and_hms(23, 59, 59))
             .unwrap_or_else(|| MAX_DATE.and_hms(23, 59, 59));
 
-        // Terminal initialization
+//         Terminal initialization
         let stdout = io::stdout().into_raw_mode()?;
         let stdout = MouseTerminal::from(stdout);
         let stdout = AlternateScreen::from(stdout);
@@ -515,10 +515,10 @@ impl<'a> Quoth<'a> {
         let mut terminal = Terminal::new(backend)?;
         terminal.hide_cursor()?;
 
-        // Setup event handlers
+//         Setup event handlers
         let events = utils::Events::new();
 
-        // Get counts
+//         Get counts
         let bar_width = 5;
         let num_rows = (terminal.size()?.height / 5 - 4) as usize;
         let num_bars = termwidth() / bar_width;
@@ -549,7 +549,6 @@ impl<'a> Quoth<'a> {
             .iter()
             .map(|m| (format_date(*m), *(quote_counts.get(m).unwrap_or(&0))))
             .collect();
-
         let num_bars = num_bars.min(quote_counts.len());
         let author_table = self.trees.get_author_counts()?;
         let mut author_table: Vec<Vec<String>> = author_table

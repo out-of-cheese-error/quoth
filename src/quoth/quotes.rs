@@ -1,11 +1,11 @@
-use std::collections::HashMap;
-
+use anyhow::Error;
 use chrono::{Date, Datelike, DateTime, Utc};
 use console::{Alignment, pad_str, style};
-use failure::Error;
 use path_abs::{FileRead, PathDir, PathFile, PathOps};
 use serde_json;
 use textwrap::{termwidth, Wrapper};
+
+use std::collections::HashMap;
 
 use crate::config;
 use crate::errors::QuothError;

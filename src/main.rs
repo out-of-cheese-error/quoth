@@ -2,13 +2,14 @@
 #![allow(dead_code)]
 #[macro_use]
 extern crate clap;
-#[macro_use]
-extern crate failure;
+//#[macro_use]
+//extern crate failure;
 #[macro_use]
 extern crate serde_derive;
 
+//use failure::Error;
+use anyhow::Error;
 use clap::App;
-use failure::Error;
 
 use crate::quoth::Quoth;
 

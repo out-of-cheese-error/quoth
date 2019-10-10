@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-use std::str;
-
-use failure::Error;
+use anyhow::Error;
 use path_abs::{PathDir, PathOps};
 use sled;
+
+use std::collections::HashMap;
+use std::str;
 
 use crate::config;
 use crate::errors::QuothError;
@@ -16,7 +16,9 @@ fn merge_index(_key: &[u8], old_indices: Option<&[u8]>, new_index: &[u8]) -> Opt
     let mut ret = old_indices
         .map(|old| old.to_vec())
         .unwrap_or_else(|| vec![]);
-    ret.extend_from_slice(&[config::SEMICOLON]);
+    if !ret.is_empty() {
+        ret.extend_from_slice(&[config::SEMICOLON]);
+    }
     ret.extend_from_slice(new_index);
     Some(ret)
 }
@@ -95,12 +97,16 @@ impl Trees {
         book_key: &[u8],
         index_key: &[u8],
     ) -> Result<(), Error> {
-        self.author_book_tree()?
-            .merge(author_key.to_vec(), book_key.to_vec())?;
+        let author_book_tree = self.author_book_tree()?;
+        if let Some(books) = author_book_tree.get(book_key)? {
+            if !utils::split_values_string(&books)?.contains(&utils::u8_to_str(book_key)?) {
+                author_book_tree.merge(author_key.to_vec(), book_key.to_vec())?;
+            }
+        }
         self.book_quote_tree()?
             .merge(book_key.to_vec(), index_key.to_vec())?;
         self.book_author_tree()?
-            .merge(book_key.to_vec(), author_key.to_vec())?;
+            .insert(book_key.to_vec(), author_key.to_vec())?;
         Ok(())
     }
 
@@ -334,7 +340,9 @@ impl Trees {
                 })
                 .and_then(|(a, quotes)| {
                     match (utils::u8_to_str(&a), utils::split_indices_usize(&quotes)) {
-                        (Ok(a), Ok(quotes)) => Ok((a, quotes.len() as u64)),
+                        (Ok(a), Ok(quotes)) => {
+                            Ok((a, quotes.len() as u64))
+                        },
                         _ => Err(QuothError::OutOfCheeseError {
                             message: "Corrupt author_quote_tree".into(),
                         }),
