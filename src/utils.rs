@@ -19,6 +19,9 @@ use termion::input::TermRead;
 use crate::config;
 use crate::errors::QuothError;
 
+/// ASCII code of semicolon
+pub const SEMICOLON: u8 = 59;
+
 pub const RAVEN: char = '\u{1313F}';
 
 /// Capitalizes first letter of a word and lowercases the rest
@@ -56,7 +59,7 @@ pub fn u8_to_str(input: &[u8]) -> Result<String, Error> {
 pub fn split_values_string(index_list: &[u8]) -> Result<Vec<String>, Error> {
     let index_list_string = str::from_utf8(index_list)?;
     Ok(index_list_string
-        .split(str::from_utf8(&[config::SEMICOLON])?)
+        .split(str::from_utf8(&[SEMICOLON])?)
         .map(|s| s.to_string())
         .collect())
 }
@@ -65,7 +68,7 @@ pub fn split_values_string(index_list: &[u8]) -> Result<Vec<String>, Error> {
 pub fn split_indices_usize(index_list: &[u8]) -> Result<Vec<usize>, Error> {
     let index_list_string = str::from_utf8(index_list)?;
     Ok(index_list_string
-        .split(str::from_utf8(&[config::SEMICOLON])?)
+        .split(str::from_utf8(&[SEMICOLON])?)
         .map(|word: &str| word.parse::<usize>())
         .collect::<Result<Vec<_>, _>>()?)
 }
@@ -76,7 +79,7 @@ pub fn make_indices_string(index_list: &[usize]) -> Result<Vec<u8>, Error> {
         .iter()
         .map(|index| index.to_string())
         .collect::<Vec<String>>()
-        .join(str::from_utf8(&[config::SEMICOLON])?)
+        .join(str::from_utf8(&[SEMICOLON])?)
         .as_bytes()
         .to_vec())
 }

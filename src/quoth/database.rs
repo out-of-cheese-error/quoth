@@ -17,21 +17,10 @@ fn merge_index(_key: &[u8], old_indices: Option<&[u8]>, new_index: &[u8]) -> Opt
         .map(|old| old.to_vec())
         .unwrap_or_else(|| vec![]);
     if !ret.is_empty() {
-        ret.extend_from_slice(&[config::SEMICOLON]);
+        ret.extend_from_slice(&[utils::SEMICOLON]);
     }
     ret.extend_from_slice(new_index);
     Some(ret)
-}
-
-/// Sort indices and set key value to sorted indices
-fn set_sorted(tree: &mut sled::Tree, key: &[u8]) -> Result<(), Error> {
-    tree.insert(
-        key.to_vec(),
-        utils::make_indices_string(&utils::insertion_sort(&utils::split_indices_usize(
-            &tree.get(key)?.unwrap(),
-        )?))?,
-    )?;
-    Ok(())
 }
 
 /// Stores linkage information between authors, books, tags and quotes, along with quoth metadata

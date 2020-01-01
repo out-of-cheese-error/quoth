@@ -259,8 +259,8 @@ impl<'a> Quoth<'a> {
     /// Shows a quote matching a given index
     fn show_quote(&self) -> Result<(), Error> {
         let index =
-            utils::get_argument_value("index", &self.matches)?.ok_or(QuothError::OutOfCheeseError {
-                message: "Argument pattern not used".into(),
+            utils::get_argument_value("show", &self.matches)?.ok_or(QuothError::OutOfCheeseError {
+                message: "Argument index not used".into(),
             })?.parse::<usize>().with_context(|| format!("Given index is not a number"))?;
         self.trees.get_quote(index)?.pretty_print();
         Ok(())
@@ -649,7 +649,6 @@ impl<'a> Quoth<'a> {
                     .render(&mut f, chunks[0]);
 
                     // Total Stats
-
                     Paragraph::new(
                         vec![
                             Text::styled(

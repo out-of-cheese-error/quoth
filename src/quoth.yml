@@ -188,7 +188,7 @@ subcommands:
         conflicts_with:
         - json
 - export:
-    help: Saves (optionally filtered) quotes to a TSV file
+      about: Saves (optionally filtered) quotes to a TSV file
     display-order: 5
     args:
     - filename:
