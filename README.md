@@ -25,4 +25,4 @@ Random quote:
 ![quoth pretty print](images/quoth_pretty_print.png)
 
 
-[Quoth, the raven](https://wiki.lspace.org/mediawiki/Quoth)
+[Quoth the Raven](https://wiki.lspace.org/mediawiki/Quoth)
