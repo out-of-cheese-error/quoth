@@ -1,5 +1,9 @@
-![quoth](images/raven.jpg)
-# quoth
+<!---
+ ![quoth](images/raven.jpg)
+-->
+# quoth <img style="float: left;" src="images/raven.jpg">
+
+
 
 ### a command-line tool to record, retrieve, search, and categorize quotes from books
 
