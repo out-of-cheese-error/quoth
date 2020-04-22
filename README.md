@@ -1,5 +1,6 @@
-# quoth
 ![quoth](images/raven.jpg)
+# quoth
+
 ### a command-line tool to record, retrieve, search, and categorize quotes from books
 
 A Rust learning project. 
